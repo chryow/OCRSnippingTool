@@ -51,3 +51,15 @@ def test_vision_ai_configured_env_fallback(monkeypatch) -> None:
 
     cfg_ollama = AppConfig(ai_provider="ollama", ollama_base_url="http://localhost:11434")
     assert cfg_ollama.is_vision_ai_configured() is True
+
+
+def test_get_models_dir_creates_folder(tmp_path: Path, monkeypatch) -> None:
+    from ocr_snip.config import get_models_dir
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    models_dir = get_models_dir()
+    assert models_dir.exists()
+    assert models_dir.is_dir()
+    assert models_dir.name == "models"
+

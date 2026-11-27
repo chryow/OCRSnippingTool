@@ -19,6 +19,7 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageOps
 
+from ocr_snip.config import get_models_dir
 from ocr_snip.language import detect_languages
 from ocr_snip.ocr.base import OCREngine, OCRLine, OCRResult
 
@@ -175,6 +176,7 @@ class LocalRapidOCREngine(OCREngine):
             params: dict[str, Any] = {
                 "Global.log_level": "warning",
                 "Global.text_score": 0.45,
+                "Global.model_root_dir": str(get_models_dir()),
             }
             if profile.ocr_version == "PP-OCRv5":
                 params.update(

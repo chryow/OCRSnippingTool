@@ -3,9 +3,24 @@
 > **Snipping Tool (`Win+Shift+S`), reimagined — drag over any part of your screen to extract text with Hybrid AI/ML OCR, automatic multilingual language detection, instant clipboard copy, and a sleek floating preview/edit popup.**
 
 [![CI](https://github.com/chryow/OCRSnippingTool/actions/workflows/ci.yml/badge.svg)](https://github.com/chryow/OCRSnippingTool/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/chryow/OCRSnippingTool?label=Download&color=10b981)](https://github.com/chryow/OCRSnippingTool/releases/latest)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776ab?logo=python&logoColor=white)](https://www.python.org/)
 [![PyQt6](https://img.shields.io/badge/UI-PyQt6-41cd52?logo=qt&logoColor=white)](https://www.riverbankcomputing.com/software/pyqt/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6366f1.svg)](LICENSE)
+
+---
+
+## Easy Download (No Python Required!)
+
+Grab the latest pre-built app directly from the **[Releases Page](https://github.com/chryow/OCRSnippingTool/releases/latest)**:
+
+| Operating System | File to Download | How to Run |
+| --- | --- | --- |
+| **Windows (x64)** | `OCRSnippingTool-Windows-x64-Portable.exe` *(single file)*<br/>or `OCRSnippingTool-Windows-x64.zip` *(faster startup)* | Double-click `OCRSnippingTool.exe` — no installation needed! |
+| **macOS (Apple Silicon)** | `OCRSnippingTool-macOS-arm64.zip` | Unzip and drag `OCRSnippingTool.app` into **Applications**. |
+| **Linux (x64)** | `OCRSnippingTool-Linux-x64.tar.gz` | Run `tar -xzf OCRSnippingTool-Linux-x64.tar.gz && ./OCRSnippingTool/OCRSnippingTool`. |
+
+> **First run note:** The lightweight offline OCR model (~30 MB) downloads automatically once and is cached permanently in your user folder so subsequent snips work 100% offline.
 
 ---
 
@@ -48,7 +63,7 @@ flowchart LR
 
 ---
 
-## Quick Start
+## Running from Source (Developers)
 
 ### 1. Clone & Install
 
