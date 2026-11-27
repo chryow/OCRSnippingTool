@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+
 from PIL import Image
-from PyQt6.QtCore import QPoint, QRect, QRectF, Qt, pyqtSignal
+from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QFont,
@@ -19,6 +21,8 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QWidget
 
 from ocr_snip.capture.screenshot import ScreenCapture
+
+logger = logging.getLogger("ocr_snip.overlay")
 
 
 def _logical_virtual_geometry(capture: ScreenCapture) -> QRect:
@@ -112,79 +116,93 @@ class SnipOverlay(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
         if event is None or event.button() != Qt.MouseButton.LeftButton or not self._dragging:
             return
-        self._dragging = False
-        self._current = event.position().toPoint()
-        rect = self.selection_rect
-        global_pos = event.globalPosition().toPoint()
+        try:
+            self._dragging = False
+            self._current = event.position().toPoint()
+            rect = self.selection_rect
+            global_pos = event.globalPosition().toPoint()
 
-        if rect.width() < self.MIN_SELECTION_PX or rect.height() < self.MIN_SELECTION_PX:
+            if rect.width() < self.MIN_SELECTION_PX or rect.height() < self.MIN_SELECTION_PX:
+                self._cancel()
+                return
+
+            cropped = self._capture.crop_from_overlay_rect(
+                rect.x(),
+                rect.y(),
+                rect.width(),
+                rect.height(),
+                self.width(),
+                self.height(),
+            )
+            self.hide()
+            self.region_captured.emit(cropped, global_pos)
+            self.close()
+        except Exception:
+            logger.exception("Error completing snip capture; closing overlay safely")
             self._cancel()
-            return
-
-        cropped = self._capture.crop_from_overlay_rect(
-            rect.x(),
-            rect.y(),
-            rect.width(),
-            rect.height(),
-            self.width(),
-            self.height(),
-        )
-        self.hide()
-        self.region_captured.emit(cropped, global_pos)
-        self.close()
 
     def _cancel(self) -> None:
+        self._dragging = False
         self.hide()
         self.cancelled.emit()
         self.close()
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        try:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # 1. Draw the frozen desktop screenshot scaled cleanly to widget size
-        painter.drawPixmap(self.rect(), self._pixmap)
+            # 1. Draw the frozen desktop screenshot scaled cleanly to widget size
+            painter.drawPixmap(self.rect(), self._pixmap)
 
-        # 2. Dim the entire screen EXCEPT the selected rectangle
-        dim_color = QColor(9, 9, 11, 138)
-        rect = self.selection_rect
-        if self._dragging and rect.width() > 1 and rect.height() > 1:
-            path = QPainterPath()
-            path.addRect(QRectF(self.rect()))
-            path.addRect(QRectF(rect))
-            path.setFillRule(Qt.FillRule.OddEvenFill)
-            painter.fillPath(path, dim_color)
+            # 2. Dim the entire screen EXCEPT the selected rectangle
+            dim_color = QColor(9, 9, 11, 138)
+            rect = self.selection_rect
+            if self._dragging and rect.width() > 1 and rect.height() > 1:
+                path = QPainterPath()
+                path.addRect(QRectF(self.rect()))
+                path.addRect(QRectF(rect))
+                path.setFillRule(Qt.FillRule.OddEvenFill)
+                painter.fillPath(path, dim_color)
 
-            # Subtle dark outer contrast stroke + crisp pure-white selection frame
-            painter.setPen(QPen(QColor(0, 0, 0, 140), 3))
-            painter.drawRect(rect)
-            painter.setPen(QPen(QColor("#ffffff"), 1.5))
-            painter.drawRect(rect)
+                # Subtle dark outer contrast stroke + crisp pure-white selection frame
+                painter.setPen(QPen(QColor(0, 0, 0, 140), 3.0))
+                painter.drawRect(rect)
+                painter.setPen(QPen(QColor("#ffffff"), 1.5))
+                painter.drawRect(rect)
 
-            # Minimal corner handles
-            self._draw_corner_handles(painter, rect)
+                # Minimal corner handles
+                self._draw_corner_handles(painter, rect)
 
-            # Floating dimensions pill
-            self._draw_dimensions_pill(painter, rect)
-        else:
-            painter.fillRect(self.rect(), dim_color)
-            # Subtle hairline crosshair guides before dragging
-            if self._cursor_pos.x() >= 0:
-                guide_pen = QPen(QColor(255, 255, 255, 38), 1, Qt.PenStyle.SolidLine)
-                painter.setPen(guide_pen)
-                painter.drawLine(0, self._cursor_pos.y(), self.width(), self._cursor_pos.y())
-                painter.drawLine(self._cursor_pos.x(), 0, self._cursor_pos.x(), self.height())
+                # Floating dimensions pill
+                self._draw_dimensions_pill(painter, rect)
+            else:
+                painter.fillRect(self.rect(), dim_color)
+                # Subtle hairline crosshair guides before dragging
+                if self._cursor_pos.x() >= 0:
+                    guide_pen = QPen(QColor(255, 255, 255, 38), 1.0, Qt.PenStyle.SolidLine)
+                    painter.setPen(guide_pen)
+                    painter.drawLine(0, self._cursor_pos.y(), self.width(), self._cursor_pos.y())
+                    painter.drawLine(self._cursor_pos.x(), 0, self._cursor_pos.x(), self.height())
 
-        # 3. Top-center instruction pill
-        self._draw_instruction_banner(painter)
-        painter.end()
+            # 3. Top-center instruction pill
+            self._draw_instruction_banner(painter)
+        except Exception:
+            logger.exception("SnipOverlay paint error; dismissing overlay safely")
+            if painter.isActive():
+                painter.end()
+            self._cancel()
+            return
+        finally:
+            if painter.isActive():
+                painter.end()
 
     def _draw_corner_handles(self, painter: QPainter, rect: QRect) -> None:
         painter.setBrush(QColor("#ffffff"))
         painter.setPen(QPen(QColor("#18181b"), 1.2))
         r = 3.5
         for pt in (rect.topLeft(), rect.topRight(), rect.bottomLeft(), rect.bottomRight()):
-            painter.drawEllipse(pt, r, r)
+            painter.drawEllipse(QPointF(pt), r, r)
 
     def _draw_dimensions_pill(self, painter: QPainter, rect: QRect) -> None:
         label = f"{rect.width()} × {rect.height()}"

@@ -24,7 +24,7 @@ from ocr_snip.ocr.local_rapidocr import SCRIPT_PROFILES
 from ocr_snip.ocr.vision_ai import AI_OUTPUT_FORMATS
 from ocr_snip.translate import TARGET_LANGUAGES, TranslationResult
 from ocr_snip.ui.icons import svg_icon
-from ocr_snip.ui.theme import apply_sleek_theme
+from ocr_snip.ui.theme import SleekComboBox, apply_sleek_theme
 
 
 class ResultPopup(QWidget):
@@ -267,7 +267,7 @@ class ResultPopup(QWidget):
         actions_row = QHBoxLayout()
         actions_row.setSpacing(8)
 
-        self.target_lang_combo = QComboBox()
+        self.target_lang_combo = SleekComboBox()
         self.target_lang_combo.setToolTip("Target language for translation")
         self.target_lang_combo.setSizeAdjustPolicy(
             QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
@@ -288,7 +288,7 @@ class ResultPopup(QWidget):
         self.translate_btn.clicked.connect(self._on_translate_clicked)
         actions_row.addWidget(self.translate_btn)
 
-        self.ai_format_combo = QComboBox()
+        self.ai_format_combo = SleekComboBox()
         self.ai_format_combo.setToolTip("Output format when enhancing with AI")
         self.ai_format_combo.setSizeAdjustPolicy(
             QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
@@ -331,7 +331,7 @@ class ResultPopup(QWidget):
         script_lbl.setObjectName("MutedLabel")
         u_layout.addWidget(script_lbl)
 
-        self.script_combo = QComboBox()
+        self.script_combo = SleekComboBox()
         self.script_combo.setObjectName("CompactCombo")
         self.script_combo.setToolTip("Re-scan this snip with another offline script model")
         for key, profile in SCRIPT_PROFILES.items():

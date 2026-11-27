@@ -340,6 +340,56 @@ def test_vector_icons_and_tray_menu_styling(qtbot, tmp_path) -> None:
         controller.popup.hide()
 
 
+def test_overlay_drag_paint_and_capture_end_to_end(qtbot) -> None:
+    """Exercise SnipOverlay paintEvent in idle and active-drag states plus full capture."""
+    img = Image.new("RGB", (400, 300), "white")
+    cap = ScreenCapture(image=img, left=0, top=0, width=400, height=300)
+    overlay = SnipOverlay(cap)
+    qtbot.addWidget(overlay)
+    overlay.show()
+
+    # 1. Paint idle crosshair state
+    overlay._cursor_pos = QPoint(80, 60)
+    assert not overlay.grab().isNull()
+
+    # 2. Simulate left-button press + drag + paint (tests corner handles, selection rect, pills)
+    qtbot.mousePress(overlay, Qt.MouseButton.LeftButton, pos=QPoint(30, 30))
+    overlay._current = QPoint(180, 140)
+    assert not overlay.grab().isNull()
+
+    # 3. Release mouse and verify cropped image is emitted cleanly
+    with qtbot.waitSignal(overlay.region_captured, timeout=1000) as blocker:
+        qtbot.mouseRelease(overlay, Qt.MouseButton.LeftButton, pos=QPoint(180, 140))
+
+    cropped_img, _global_pos = blocker.args
+    assert isinstance(cropped_img, Image.Image)
+    assert cropped_img.width > 10 and cropped_img.height > 10
+
+
+def test_all_dialogs_paint_cleanly_without_errors(qtbot) -> None:
+    """Render ResultPopup and every SettingsDialog tab via grab() to verify all paintEvent overrides."""
+    popup = ResultPopup()
+    qtbot.addWidget(popup)
+    popup.show_result(
+        OCRResult(
+            text="Hello world",
+            engine_name="Local OCR",
+            confidence=0.98,
+            languages=[DetectedLanguage("en", "English")],
+        ),
+        auto_copied=True,
+    )
+    assert not popup.grab().isNull()
+
+    dialog = SettingsDialog(AppConfig())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    for tab_idx in range(dialog.tabs.count()):
+        dialog.tabs.setCurrentIndex(tab_idx)
+        assert not dialog.grab().isNull()
+
+
+
 
 
 

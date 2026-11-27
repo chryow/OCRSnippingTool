@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QEvent, QObject, QPointF, QRectF, Qt
+from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
-from PyQt6.QtWidgets import QAbstractSpinBox, QComboBox, QProxyStyle, QStyle, QStyleOption, QWidget
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QDoubleSpinBox,
+    QProxyStyle,
+    QSpinBox,
+    QStyle,
+    QStyleOption,
+    QWidget,
+)
 
 DARK_STYLESHEET = """
 QWidget {
@@ -542,57 +550,71 @@ class SleekProxyStyle(QProxyStyle):
         painter.restore()
 
 
-class _ChevronDecorator(QObject):
-    """Paints razor-sharp vector chevrons on QComboBox and QAbstractSpinBox widgets."""
-
-    def eventFilter(self, obj: QObject | None, event: QEvent | None) -> bool:
-        if event is not None and event.type() == QEvent.Type.Paint and isinstance(obj, QWidget):
-            # Let the widget finish its normal paint first, then paint crisp chevrons on top
-            obj.removeEventFilter(self)
-            try:
-                obj.event(event)
-                self._paint_overlay(obj)
-            finally:
-                obj.installEventFilter(self)
-            return True
-        return False
-
-    @staticmethod
-    def _paint_overlay(widget: QWidget) -> None:
-        painter = QPainter(widget)
+def _paint_down_chevron(widget: QWidget) -> None:
+    painter = QPainter(widget)
+    try:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         color = QColor("#8e8e98" if widget.isEnabled() else "#52525b")
         pen = QPen(color, 1.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
         painter.setPen(pen)
+        cx = widget.width() - 12.5
+        cy = widget.height() / 2.0
+        painter.drawPolyline(
+            [QPointF(cx - 3.3, cy - 1.4), QPointF(cx, cy + 2.0), QPointF(cx + 3.3, cy - 1.4)]
+        )
+    finally:
+        if painter.isActive():
+            painter.end()
 
-        if isinstance(widget, QComboBox):
-            cx = widget.width() - 12.5
-            cy = widget.height() / 2.0
-            painter.drawPolyline(
-                [QPointF(cx - 3.3, cy - 1.4), QPointF(cx, cy + 2.0), QPointF(cx + 3.3, cy - 1.4)]
-            )
-        elif isinstance(widget, QAbstractSpinBox):
-            cx = widget.width() - 10.5
-            cy_up = widget.height() * 0.33
-            cy_dn = widget.height() * 0.67
-            painter.drawPolyline(
-                [QPointF(cx - 2.8, cy_up + 1.2), QPointF(cx, cy_up - 1.5), QPointF(cx + 2.8, cy_up + 1.2)]
-            )
-            painter.drawPolyline(
-                [QPointF(cx - 2.8, cy_dn - 1.2), QPointF(cx, cy_dn + 1.5), QPointF(cx + 2.8, cy_dn - 1.2)]
-            )
-        painter.end()
+
+def _paint_spin_chevrons(widget: QWidget) -> None:
+    painter = QPainter(widget)
+    try:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        color = QColor("#8e8e98" if widget.isEnabled() else "#52525b")
+        pen = QPen(color, 1.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        cx = widget.width() - 10.5
+        cy_up = widget.height() * 0.33
+        cy_dn = widget.height() * 0.67
+        painter.drawPolyline(
+            [QPointF(cx - 2.8, cy_up + 1.2), QPointF(cx, cy_up - 1.5), QPointF(cx + 2.8, cy_up + 1.2)]
+        )
+        painter.drawPolyline(
+            [QPointF(cx - 2.8, cy_dn - 1.2), QPointF(cx, cy_dn + 1.5), QPointF(cx + 2.8, cy_dn - 1.2)]
+        )
+    finally:
+        if painter.isActive():
+            painter.end()
+
+
+class SleekComboBox(QComboBox):
+    """QComboBox that safely draws a crisp anti-aliased chevron inside paintEvent."""
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        _paint_down_chevron(self)
+
+
+class SleekSpinBox(QSpinBox):
+    """QSpinBox that safely draws crisp anti-aliased up/down chevrons inside paintEvent."""
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        _paint_spin_chevrons(self)
+
+
+class SleekDoubleSpinBox(QDoubleSpinBox):
+    """QDoubleSpinBox that safely draws crisp anti-aliased up/down chevrons inside paintEvent."""
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        _paint_spin_chevrons(self)
 
 
 def apply_sleek_theme(root: QWidget) -> None:
-    """Apply stylesheet and attach crisp chevron decorators to all combos/spinboxes in `root`."""
+    """Apply the unified minimalist stylesheet to `root`."""
     root.setStyleSheet(DARK_STYLESHEET)
-    decorator = _ChevronDecorator(root)
-    setattr(root, "_sleek_chevron_decorator", decorator)
-    for combo in root.findChildren(QComboBox):
-        combo.installEventFilter(decorator)
-    for spin in root.findChildren(QAbstractSpinBox):
-        spin.installEventFilter(decorator)
 
 
 def create_app_icon(size: int = 64) -> QIcon:
