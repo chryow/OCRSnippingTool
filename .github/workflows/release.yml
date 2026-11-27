@@ -1,0 +1,195 @@
+name: Build & Publish Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v1.0.0)"
+        required: true
+        default: "v1.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows (.exe & .zip)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+          pip install --no-deps -e .
+
+      - name: Build Windows portable single-file .exe
+        run: python build_exe.py --onefile --name OCRSnippingTool-Windows-x64-Portable
+
+      - name: Build Windows fast-startup folder bundle
+        run: python build_exe.py --name OCRSnippingTool
+
+      - name: Package Windows artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release_out | Out-Null
+          Copy-Item "dist/OCRSnippingTool-Windows-x64-Portable.exe" "release_out/OCRSnippingTool-Windows-x64-Portable.exe"
+          Compress-Archive -Path "dist/OCRSnippingTool/*" -DestinationPath "release_out/OCRSnippingTool-Windows-x64.zip" -Force
+          Get-ChildItem release_out
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-dist
+          path: release_out/*
+
+  build-macos:
+    name: Build macOS (.app .zip)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+          pip install --no-deps -e .
+
+      - name: Build macOS .app bundle
+        run: python build_exe.py --name OCRSnippingTool
+
+      - name: Smoke-test macOS binary
+        run: ./dist/OCRSnippingTool.app/Contents/MacOS/OCRSnippingTool --version
+
+      - name: Package macOS artifact
+        run: |
+          mkdir -p release_out
+          ditto -c -k --sequesterRsrc --keepParent dist/OCRSnippingTool.app release_out/OCRSnippingTool-macOS-arm64.zip
+          ls -lh release_out
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dist
+          path: release_out/*
+
+  build-linux:
+    name: Build Linux (.tar.gz)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Qt system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 \
+            libgl1 \
+            libxkbcommon0 \
+            libdbus-1-3 \
+            libfontconfig1
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+          pip install --no-deps -e .
+
+      - name: Build Linux bundle
+        run: python build_exe.py --name OCRSnippingTool
+
+      - name: Smoke-test Linux binary
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ./dist/OCRSnippingTool/OCRSnippingTool --version
+
+      - name: Package Linux artifact
+        run: |
+          mkdir -p release_out
+          tar -czf release_out/OCRSnippingTool-Linux-x64.tar.gz -C dist OCRSnippingTool
+          ls -lh release_out
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-dist
+          path: release_out/*
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all OS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate SHA-256 checksums
+        working-directory: release-assets
+        run: |
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          cat <<'EOF' > release_notes.md
+          ## OCRSnippingTool — Ready-to-Run Downloads (No Python Required!)
+
+          Pick the download for your operating system below:
+
+          | Operating System | Recommended File | How to Run |
+          | --- | --- | --- |
+          | **Windows (x64)** | `OCRSnippingTool-Windows-x64-Portable.exe` | Download and double-click to launch! *(Or use `OCRSnippingTool-Windows-x64.zip` for faster startup.)* |
+          | **macOS (Apple Silicon)** | `OCRSnippingTool-macOS-arm64.zip` | Unzip and move `OCRSnippingTool.app` to Applications. Grant **Screen Recording** & **Accessibility** permissions when prompted. |
+          | **Linux (x64)** | `OCRSnippingTool-Linux-x64.tar.gz` | Extract (`tar -xzf OCRSnippingTool-Linux-x64.tar.gz`) and run `./OCRSnippingTool/OCRSnippingTool`. |
+
+          ### Highlights
+          - **Win+Shift+S style snipping overlay** with multi-monitor HiDPI support
+          - **Hybrid AI/ML OCR**: Offline RapidOCR (ONNX PP-OCRv6 universal + PP-OCRv5 100+ language scripts) + optional **Gemini / OpenAI / Ollama** Vision AI
+          - **Automatic multilingual language detection** (70+ languages, single & mixed scripts)
+          - **Instant clipboard auto-copy + floating preview/edit popup**
+          - Models cache persistently in your user data folder on first run (`%APPDATA%\OCRSnippingTool\models` on Windows, `~/Library/Application Support/OCRSnippingTool/models` on macOS, `~/.config/OCRSnippingTool/models` on Linux).
+          EOF
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --notes-file release_notes.md
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          else
+            gh release create "$RELEASE_TAG" release-assets/* \
+              --title "OCRSnippingTool $RELEASE_TAG" \
+              --notes-file release_notes.md \
+              --latest
+          fi

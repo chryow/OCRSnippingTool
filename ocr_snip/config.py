@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,8 @@ def get_config_dir() -> Path:
     """Return the platform-appropriate configuration directory."""
     if os.name == "nt":
         base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
     else:
         base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
     return base / "OCRSnippingTool"
@@ -21,6 +24,17 @@ def get_config_dir() -> Path:
 def get_config_path() -> Path:
     """Return the path to the persistent JSON configuration file."""
     return get_config_dir() / "config.json"
+
+
+def get_models_dir() -> Path:
+    """Return a user-writable directory for caching downloaded ONNX OCR models.
+
+    Essential for frozen PyInstaller executables (.exe / .app) where the bundled
+    package directory is read-only or temporary.
+    """
+    models_dir = get_config_dir() / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    return models_dir
 
 
 @dataclass
