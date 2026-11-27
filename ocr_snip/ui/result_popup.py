@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QPoint, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QPoint, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QGuiApplication, QKeyEvent, QKeySequence, QMouseEvent, QShortcut
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -22,7 +23,8 @@ from ocr_snip.ocr.base import OCRResult
 from ocr_snip.ocr.local_rapidocr import SCRIPT_PROFILES
 from ocr_snip.ocr.vision_ai import AI_OUTPUT_FORMATS
 from ocr_snip.translate import TARGET_LANGUAGES, TranslationResult
-from ocr_snip.ui.theme import DARK_STYLESHEET
+from ocr_snip.ui.icons import svg_icon
+from ocr_snip.ui.theme import apply_sleek_theme
 
 
 class ResultPopup(QWidget):
@@ -62,6 +64,7 @@ class ResultPopup(QWidget):
 
         self._setup_window()
         self._build_ui()
+        apply_sleek_theme(self)
         self._bind_shortcuts()
 
     def _setup_window(self) -> None:
@@ -71,10 +74,9 @@ class ResultPopup(QWidget):
             | Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setMinimumWidth(520)
-        self.setMaximumWidth(700)
-        self.resize(560, 390)
-        self.setStyleSheet(DARK_STYLESHEET)
+        self.setMinimumWidth(636)
+        self.setMaximumWidth(780)
+        self.resize(644, 415)
 
     def _bind_shortcuts(self) -> None:
         QShortcut(QKeySequence("Ctrl+Shift+C"), self, activated=self.copy_current_text)
@@ -102,49 +104,63 @@ class ResultPopup(QWidget):
         self.header = QFrame()
         self.header.setObjectName("HeaderBar")
         header_layout = QHBoxLayout(self.header)
-        header_layout.setContentsMargins(14, 9, 10, 9)
+        header_layout.setContentsMargins(14, 8, 10, 8)
         header_layout.setSpacing(6)
 
         self.title_label = QLabel("OCRSnippingTool")
         self.title_label.setObjectName("TitleLabel")
         header_layout.addWidget(self.title_label)
 
-        self.copied_badge = QLabel("✓ Auto-copied")
+        self.copied_badge = QLabel("Copied")
         self.copied_badge.setObjectName("CopiedPill")
         self.copied_badge.hide()
         header_layout.addWidget(self.copied_badge)
 
         header_layout.addStretch()
 
-        self.snip_btn = QPushButton("✂ Snip")
+        self.snip_btn = QPushButton(" Snip")
         self.snip_btn.setObjectName("IconButton")
+        self.snip_btn.setIcon(svg_icon("snip", 14, "#a1a1aa"))
+        self.snip_btn.setIconSize(QSize(14, 14))
         self.snip_btn.setToolTip("Capture a new region (Ctrl+N)")
         self.snip_btn.clicked.connect(self.new_snip_requested.emit)
         header_layout.addWidget(self.snip_btn)
 
-        self.history_btn = QPushButton("🕒")
+        self.history_btn = QPushButton()
         self.history_btn.setObjectName("IconButton")
-        self.history_btn.setToolTip("Open Snip History")
+        self.history_btn.setIcon(svg_icon("history", 15, "#a1a1aa"))
+        self.history_btn.setIconSize(QSize(15, 15))
+        self.history_btn.setFixedSize(28, 28)
+        self.history_btn.setToolTip("Snip History")
         self.history_btn.clicked.connect(self.history_requested.emit)
         header_layout.addWidget(self.history_btn)
 
-        self.pin_btn = QPushButton("📌")
+        self.pin_btn = QPushButton()
         self.pin_btn.setObjectName("IconButton")
         self.pin_btn.setCheckable(True)
         self.pin_btn.setChecked(True)
-        self.pin_btn.setToolTip("Keep floating popup on top")
+        self.pin_btn.setIcon(svg_icon("pin_filled", 15, "#f4f4f5"))
+        self.pin_btn.setIconSize(QSize(15, 15))
+        self.pin_btn.setFixedSize(28, 28)
+        self.pin_btn.setToolTip("Keep floating window on top")
         self.pin_btn.toggled.connect(self._toggle_pin)
         header_layout.addWidget(self.pin_btn)
 
-        self.settings_btn = QPushButton("⚙")
+        self.settings_btn = QPushButton()
         self.settings_btn.setObjectName("IconButton")
-        self.settings_btn.setToolTip("Settings & Language Packs")
+        self.settings_btn.setIcon(svg_icon("settings", 15, "#a1a1aa"))
+        self.settings_btn.setIconSize(QSize(15, 15))
+        self.settings_btn.setFixedSize(28, 28)
+        self.settings_btn.setToolTip("Settings")
         self.settings_btn.clicked.connect(self.settings_requested.emit)
         header_layout.addWidget(self.settings_btn)
 
-        self.close_btn = QPushButton("✕")
+        self.close_btn = QPushButton()
         self.close_btn.setObjectName("IconButton")
-        self.close_btn.setToolTip("Close popup (Esc)")
+        self.close_btn.setIcon(svg_icon("close", 14, "#a1a1aa"))
+        self.close_btn.setIconSize(QSize(14, 14))
+        self.close_btn.setFixedSize(28, 28)
+        self.close_btn.setToolTip("Close (Esc)")
         self.close_btn.clicked.connect(self.hide)
         header_layout.addWidget(self.close_btn)
 
@@ -155,7 +171,7 @@ class ResultPopup(QWidget):
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
         self.progress.setTextVisible(False)
-        self.progress.setFixedHeight(3)
+        self.progress.setFixedHeight(2)
         self.progress.hide()
         card_layout.addWidget(self.progress)
 
@@ -165,15 +181,15 @@ class ResultPopup(QWidget):
         body_layout.setContentsMargins(14, 12, 14, 12)
         body_layout.setSpacing(10)
 
-        # Metadata strip
+        # Quiet metadata strip
         meta_row = QHBoxLayout()
-        meta_row.setSpacing(6)
+        meta_row.setSpacing(8)
 
-        self.lang_pill = QLabel("🌐 Detecting...")
+        self.lang_pill = QLabel("Detecting...")
         self.lang_pill.setObjectName("LangPill")
         meta_row.addWidget(self.lang_pill)
 
-        self.engine_pill = QLabel("Local ML")
+        self.engine_pill = QLabel("Local OCR")
         self.engine_pill.setObjectName("EnginePill")
         meta_row.addWidget(self.engine_pill)
 
@@ -184,16 +200,18 @@ class ResultPopup(QWidget):
 
         meta_row.addStretch()
 
-        self.unwrap_btn = QPushButton("¶ Unwrap")
+        self.unwrap_btn = QPushButton(" Unwrap")
         self.unwrap_btn.setObjectName("IconButton")
+        self.unwrap_btn.setIcon(svg_icon("unwrap", 14, "#a1a1aa"))
+        self.unwrap_btn.setIconSize(QSize(14, 14))
         self.unwrap_btn.setCheckable(True)
-        self.unwrap_btn.setToolTip("Merge hard PDF/article line breaks into flowing paragraphs")
+        self.unwrap_btn.setToolTip("Join hard line breaks into smooth paragraphs")
         self.unwrap_btn.toggled.connect(self._on_unwrap_toggled)
         meta_row.addWidget(self.unwrap_btn)
 
         body_layout.addLayout(meta_row)
 
-        # Optional status / fallback banner
+        # Optional status / warning banner
         self.note_label = QLabel("")
         self.note_label.setObjectName("WarnPill")
         self.note_label.setWordWrap(True)
@@ -220,14 +238,19 @@ class ResultPopup(QWidget):
         self.translate_meta_label.setWordWrap(True)
         tp_header.addWidget(self.translate_meta_label, stretch=1)
 
-        self.copy_trans_btn = QPushButton("Copy Translation")
+        self.copy_trans_btn = QPushButton(" Copy")
         self.copy_trans_btn.setObjectName("IconButton")
+        self.copy_trans_btn.setIcon(svg_icon("copy", 13, "#a1a1aa"))
+        self.copy_trans_btn.setIconSize(QSize(13, 13))
         self.copy_trans_btn.clicked.connect(self.copy_translated_text)
         tp_header.addWidget(self.copy_trans_btn)
 
-        self.hide_trans_btn = QPushButton("✕")
+        self.hide_trans_btn = QPushButton()
         self.hide_trans_btn.setObjectName("IconButton")
-        self.hide_trans_btn.setToolTip("Hide translation panel")
+        self.hide_trans_btn.setIcon(svg_icon("close", 13, "#a1a1aa"))
+        self.hide_trans_btn.setIconSize(QSize(13, 13))
+        self.hide_trans_btn.setFixedSize(24, 24)
+        self.hide_trans_btn.setToolTip("Hide translation")
         self.hide_trans_btn.clicked.connect(self.translate_panel.hide)
         tp_header.addWidget(self.hide_trans_btn)
         tp_layout.addLayout(tp_header)
@@ -240,38 +263,56 @@ class ResultPopup(QWidget):
         self.translate_panel.hide()
         body_layout.addWidget(self.translate_panel)
 
-        # Single crisp Primary Action Bar: Translate | AI Enhance | Copy
+        # Clean Primary Action Bar: Translate | Enhance | Copy
         actions_row = QHBoxLayout()
-        actions_row.setSpacing(6)
+        actions_row.setSpacing(8)
 
         self.target_lang_combo = QComboBox()
-        self.target_lang_combo.setToolTip("Target language for 1-click translation")
-        self.target_lang_combo.setMinimumWidth(115)
+        self.target_lang_combo.setToolTip("Target language for translation")
+        self.target_lang_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.target_lang_combo.setMinimumContentsLength(10)
+        self.target_lang_combo.setMinimumWidth(136)
         for code, name in TARGET_LANGUAGES:
             self.target_lang_combo.addItem(name, userData=code)
         self.target_lang_combo.currentIndexChanged.connect(self._on_target_lang_changed)
         actions_row.addWidget(self.target_lang_combo, stretch=1)
 
-        self.translate_btn = QPushButton("🌐 Translate")
+        self.translate_btn = QPushButton(" Translate")
         self.translate_btn.setObjectName("TranslateButton")
+        self.translate_btn.setIcon(svg_icon("translate", 14, "#d4d4d8"))
+        self.translate_btn.setIconSize(QSize(14, 14))
+        self.translate_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.translate_btn.setToolTip("Translate extracted text (Ctrl+T)")
         self.translate_btn.clicked.connect(self._on_translate_clicked)
         actions_row.addWidget(self.translate_btn)
 
         self.ai_format_combo = QComboBox()
-        self.ai_format_combo.setToolTip("Vision AI output format (Text, Markdown Tables, or Math LaTeX)")
+        self.ai_format_combo.setToolTip("Output format when enhancing with AI")
+        self.ai_format_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.ai_format_combo.setMinimumContentsLength(10)
+        self.ai_format_combo.setMinimumWidth(132)
         for code, label in AI_OUTPUT_FORMATS:
             self.ai_format_combo.addItem(label, userData=code)
         actions_row.addWidget(self.ai_format_combo)
 
-        self.ai_btn = QPushButton("✨ AI")
+        self.ai_btn = QPushButton(" Enhance")
         self.ai_btn.setObjectName("AIButton")
-        self.ai_btn.setToolTip("Re-extract this snip with Vision AI in the selected format")
+        self.ai_btn.setIcon(svg_icon("enhance", 14, "#d4d4d8"))
+        self.ai_btn.setIconSize(QSize(14, 14))
+        self.ai_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        self.ai_btn.setToolTip("Re-read this snip with Vision AI in the selected format")
         self.ai_btn.clicked.connect(self._on_enhance_ai_clicked)
         actions_row.addWidget(self.ai_btn)
 
-        self.copy_btn = QPushButton("Copy")
+        self.copy_btn = QPushButton(" Copy")
         self.copy_btn.setObjectName("PrimaryButton")
+        self.copy_btn.setIcon(svg_icon("copy", 14, "#09090b"))
+        self.copy_btn.setIconSize(QSize(14, 14))
+        self.copy_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.copy_btn.setToolTip("Copy text to clipboard (Ctrl+Shift+C)")
         self.copy_btn.clicked.connect(self.copy_current_text)
         actions_row.addWidget(self.copy_btn)
@@ -279,14 +320,14 @@ class ResultPopup(QWidget):
         body_layout.addLayout(actions_row)
         card_layout.addWidget(body, stretch=1)
 
-        # --- 3. Quiet Utility Footer Strip (Offline Script Switcher + Counts) ---
+        # --- 3. Quiet Utility Footer Strip ---
         utility = QFrame()
         utility.setObjectName("UtilityStrip")
         u_layout = QHBoxLayout(utility)
         u_layout.setContentsMargins(14, 7, 14, 7)
         u_layout.setSpacing(8)
 
-        script_lbl = QLabel("Offline script:")
+        script_lbl = QLabel("Script")
         script_lbl.setObjectName("MutedLabel")
         u_layout.addWidget(script_lbl)
 
@@ -334,9 +375,9 @@ class ResultPopup(QWidget):
         self.note_label.hide()
         self.translate_panel.hide()
         self.unwrap_btn.setEnabled(False)
-        self.lang_pill.setText(f"🌐 {message}")
+        self.lang_pill.setText(message)
         self.lang_pill.setToolTip("")
-        self.engine_pill.setText("Processing...")
+        self.engine_pill.setText("")
         self.stats_pill.hide()
         self.text_edit.setReadOnly(True)
         self.script_combo.setEnabled(False)
@@ -399,19 +440,19 @@ class ResultPopup(QWidget):
             self.text_edit.setPlainText(result.text)
 
             if result.languages:
-                self.lang_pill.setText(f"🌐 {result.language_summary}")
+                self.lang_pill.setText(result.language_summary)
                 tooltip_lines = [
-                    f"• {lang.label}"
+                    f"{lang.label}"
                     + (f" [{lang.script}]" if lang.script else "")
                     + f" — {lang.confidence:.0%}"
                     for lang in result.languages
                 ]
                 self.lang_pill.setToolTip("Detected languages:\n" + "\n".join(tooltip_lines))
             elif has_text:
-                self.lang_pill.setText("🌐 Symbols / Numeric")
+                self.lang_pill.setText("Symbols / Numeric")
                 self.lang_pill.setToolTip("No natural language letters detected")
             else:
-                self.lang_pill.setText("🌐 No text detected")
+                self.lang_pill.setText("No text detected")
                 self.lang_pill.setToolTip("")
 
             self.engine_pill.setText(result.engine_name)
@@ -421,7 +462,7 @@ class ResultPopup(QWidget):
             if result.elapsed_ms > 0:
                 stats_parts.append(f"{int(round(result.elapsed_ms))} ms")
             if stats_parts:
-                self.stats_pill.setText(" • ".join(stats_parts))
+                self.stats_pill.setText(" · ".join(stats_parts))
                 self.stats_pill.show()
             else:
                 self.stats_pill.hide()
@@ -434,20 +475,20 @@ class ResultPopup(QWidget):
                     self._updating_combo = False
 
             if auto_copied and has_text:
-                self.copied_badge.setText("✓ Auto-copied")
+                self.copied_badge.setText("Copied")
                 self.copied_badge.show()
             else:
                 self.copied_badge.hide()
 
         if result.error:
-            self.note_label.setText(f"⚠ {result.error}")
+            self.note_label.setText(result.error)
             self.note_label.show()
         elif result.fallback_note:
-            self.note_label.setText(f"ℹ {result.fallback_note}")
+            self.note_label.setText(result.fallback_note)
             self.note_label.show()
         elif not has_text and not preserve_existing:
             self.note_label.setText(
-                "No text found. Try another offline script below or click ✨ AI."
+                "No text found. Try switching Script below or click Enhance."
             )
             self.note_label.show()
         else:
@@ -490,8 +531,8 @@ class ResultPopup(QWidget):
     def show_translation_loading(self, target_label: str) -> None:
         self._auto_close_timer.stop()
         self.translate_btn.setEnabled(False)
-        self.translate_btn.setText("Translating...")
-        self.translate_meta_label.setText(f"🌐 Translating to {target_label}...")
+        self.translate_btn.setText(" Translating...")
+        self.translate_meta_label.setText(f"Translating to {target_label}...")
         self.translated_edit.setPlaceholderText("Translating...")
         self.translated_edit.setPlainText("")
         self.translated_edit.setReadOnly(True)
@@ -500,22 +541,22 @@ class ResultPopup(QWidget):
 
     def show_translation_result(self, result: TranslationResult) -> None:
         self.translate_btn.setEnabled(bool(self.text_edit.toPlainText().strip()))
-        self.translate_btn.setText("🌐 Translate")
+        self.translate_btn.setText(" Translate")
         self.translated_edit.setReadOnly(False)
         self.translate_panel.show()
 
         if result.ok:
-            meta_parts = [f"🌐 Translated → {result.target_language}"]
+            meta_parts = [result.target_language]
             if result.provider_name:
                 meta_parts.append(result.provider_name)
             if result.elapsed_ms > 0:
                 meta_parts.append(f"{int(round(result.elapsed_ms))} ms")
-            self.translate_meta_label.setText("  •  ".join(meta_parts))
+            self.translate_meta_label.setText(" · ".join(meta_parts))
             self.translated_edit.setPlaceholderText("Translated text...")
             self.translated_edit.setPlainText(result.translated_text)
             self.copy_trans_btn.setEnabled(bool(result.translated_text.strip()))
         else:
-            self.translate_meta_label.setText(f"⚠ {result.error}")
+            self.translate_meta_label.setText(str(result.error or "Translation failed"))
             self.translated_edit.setPlaceholderText(
                 "Translation failed — try again or switch provider in Settings."
             )
@@ -527,31 +568,35 @@ class ResultPopup(QWidget):
         clipboard = QGuiApplication.clipboard()
         if clipboard is not None:
             clipboard.setText(text)
-        self.copied_badge.setText("✓ Copied")
+        self.copied_badge.setText("Copied")
         self.copied_badge.show()
-        self.copy_btn.setText("✓ Copied!")
-        self._copied_reset_timer.start(1600)
+        self.copy_btn.setIcon(svg_icon("check", 14, "#09090b"))
+        self.copy_btn.setText(" Copied")
+        self._copied_reset_timer.start(1500)
 
     def copy_translated_text(self) -> None:
         text = self.translated_edit.toPlainText()
         clipboard = QGuiApplication.clipboard()
         if clipboard is not None:
             clipboard.setText(text)
-        self.copy_trans_btn.setText("✓ Copied!")
-        self._trans_copied_reset_timer.start(1600)
+        self.copy_trans_btn.setIcon(svg_icon("check", 13, "#4ade80"))
+        self.copy_trans_btn.setText(" Copied")
+        self._trans_copied_reset_timer.start(1500)
 
     def _reset_copy_button(self) -> None:
-        self.copy_btn.setText("Copy")
+        self.copy_btn.setIcon(svg_icon("copy", 14, "#09090b"))
+        self.copy_btn.setText(" Copy")
 
     def _reset_trans_copy_button(self) -> None:
-        self.copy_trans_btn.setText("Copy Translation")
+        self.copy_trans_btn.setIcon(svg_icon("copy", 13, "#a1a1aa"))
+        self.copy_trans_btn.setText(" Copy")
 
     def _update_counts(self) -> None:
         text = self.text_edit.toPlainText()
         chars = len(text)
         words = len(text.split()) if text.strip() else 0
         lines = text.count("\n") + 1 if text else 0
-        self.count_label.setText(f"{chars} chars • {words} words • {lines} lines")
+        self.count_label.setText(f"{chars} chars · {words} words · {lines} lines")
         if not self.text_edit.isReadOnly():
             self.translate_btn.setEnabled(bool(text.strip()))
 
@@ -578,6 +623,9 @@ class ResultPopup(QWidget):
 
     def _toggle_pin(self, checked: bool) -> None:
         self._pinned = checked
+        self.pin_btn.setIcon(
+            svg_icon("pin_filled" if checked else "pin", 15, "#f4f4f5" if checked else "#a1a1aa")
+        )
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, checked)
         if self.isVisible():
             self.show()

@@ -1,237 +1,280 @@
-"""Cohesive dark-slate glassmorphic stylesheet and vector app icon generator."""
+"""Minimalist neutral-graphite stylesheet, crisp vector app/tray icons, and custom Qt style."""
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QRectF, Qt
-from PyQt6.QtGui import QColor, QFont, QIcon, QLinearGradient, QPainter, QPen, QPixmap
+from PyQt6.QtCore import QEvent, QObject, QPointF, QRectF, Qt
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
+from PyQt6.QtWidgets import QAbstractSpinBox, QComboBox, QProxyStyle, QStyle, QStyleOption, QWidget
 
 DARK_STYLESHEET = """
 QWidget {
-    color: #e6e9f2;
-    font-family: "Segoe UI", "Inter", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+    color: #e4e4e7;
+    font-family: "Segoe UI Variable", "Segoe UI", "SF Pro Text", "Inter", "Helvetica Neue", Arial, sans-serif;
     font-size: 13px;
 }
 
 QToolTip {
-    background-color: #1c2132;
-    color: #f1f5f9;
-    border: 1px solid #353f5e;
+    background-color: #202024;
+    color: #f4f4f5;
+    border: 1px solid #35353d;
     border-radius: 6px;
-    padding: 5px 8px;
+    padding: 5px 9px;
     font-size: 12px;
 }
 
+/* --- System Tray & Context Menus --- */
+QMenu {
+    background-color: #18181b;
+    color: #e4e4e7;
+    border: 1px solid #2e2e34;
+    border-radius: 9px;
+    padding: 5px;
+    font-size: 13px;
+}
+
+QMenu::item {
+    background-color: transparent;
+    color: #e4e4e7;
+    padding: 7px 24px 7px 10px;
+    border-radius: 6px;
+    margin: 1px 2px;
+}
+
+QMenu::item:selected {
+    background-color: #27272c;
+    color: #ffffff;
+}
+
+QMenu::item:disabled {
+    color: #52525b;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: #27272c;
+    margin: 5px 8px;
+}
+
+QMenu::icon {
+    padding-left: 4px;
+}
+
+/* --- Main Containers --- */
 QDialog, QFrame#PopupCard {
-    background-color: #131722;
-    border: 1px solid #262d42;
-    border-radius: 14px;
+    background-color: #18181b;
+    border: 1px solid #2b2b31;
+    border-radius: 12px;
 }
 
 QFrame#HeaderBar {
-    background-color: #181d2b;
-    border-top-left-radius: 13px;
-    border-top-right-radius: 13px;
-    border-bottom: 1px solid #232a3e;
+    background-color: #141417;
+    border-top-left-radius: 11px;
+    border-top-right-radius: 11px;
+    border-bottom: 1px solid #242429;
 }
 
 QFrame#UtilityStrip {
-    background-color: #10131d;
-    border-bottom-left-radius: 13px;
-    border-bottom-right-radius: 13px;
-    border-top: 1px solid #1f2538;
+    background-color: #141417;
+    border-bottom-left-radius: 11px;
+    border-bottom-right-radius: 11px;
+    border-top: 1px solid #242429;
 }
 
 QFrame#TranslatePanel {
-    background-color: #0f1422;
-    border: 1px solid #22304c;
-    border-radius: 10px;
-}
-
-QFrame#PackCard {
-    background-color: #0e111a;
-    border: 1px solid #232a3e;
+    background-color: #141417;
+    border: 1px solid #27272d;
     border-radius: 9px;
 }
 
-QFrame#PackCard:hover {
-    border-color: #343f5e;
+QFrame#PackCard {
+    background-color: #141417;
+    border: 1px solid #26262c;
+    border-radius: 8px;
 }
 
+QFrame#PackCard:hover {
+    border-color: #3a3a43;
+}
+
+/* --- Typography & Subtle Badges --- */
 QLabel#TitleLabel {
     font-size: 13px;
     font-weight: 600;
-    color: #f8fafc;
+    color: #f4f4f5;
+    letter-spacing: -0.1px;
 }
 
 QLabel#PackTitle {
     font-size: 13px;
     font-weight: 600;
-    color: #f1f5f9;
+    color: #f4f4f5;
 }
 
 QLabel#PackDesc {
     font-size: 11.5px;
-    color: #8b96b4;
+    color: #8e8e98;
 }
 
 QLabel#PackStatusInstalled {
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 600;
-    color: #6ee7b7;
+    color: #4ade80;
 }
 
 QLabel#PackStatusAvailable {
-    font-size: 11px;
-    color: #8b96b4;
+    font-size: 11.5px;
+    color: #71717a;
 }
 
 QLabel#LangPill {
-    background-color: rgba(99, 102, 241, 0.20);
-    border: 1px solid rgba(129, 140, 248, 0.45);
-    color: #c7d2fe;
-    border-radius: 10px;
-    padding: 3px 10px;
-    font-size: 12px;
-    font-weight: 600;
+    background-color: #232328;
+    border: 1px solid #303037;
+    color: #f4f4f5;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 11.5px;
+    font-weight: 500;
 }
 
 QLabel#EnginePill {
-    background-color: #1b2030;
-    border: 1px solid #2b334b;
-    color: #9ba6c4;
-    border-radius: 10px;
-    padding: 3px 9px;
-    font-size: 11px;
+    background-color: transparent;
+    border: none;
+    color: #8e8e98;
+    padding: 2px 4px;
+    font-size: 11.5px;
 }
 
 QLabel#CopiedPill {
-    background-color: rgba(16, 185, 129, 0.18);
-    border: 1px solid rgba(52, 211, 153, 0.45);
-    color: #6ee7b7;
-    border-radius: 10px;
-    padding: 2px 9px;
+    background-color: rgba(34, 197, 94, 0.14);
+    border: 1px solid rgba(74, 222, 128, 0.28);
+    color: #4ade80;
+    border-radius: 6px;
+    padding: 2px 8px;
     font-size: 11px;
     font-weight: 600;
 }
 
 QLabel#WarnPill {
-    background-color: rgba(245, 158, 11, 0.14);
-    border: 1px solid rgba(251, 191, 36, 0.38);
-    color: #fcd34d;
-    border-radius: 9px;
-    padding: 5px 10px;
-    font-size: 11.5px;
+    background-color: rgba(217, 119, 6, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.30);
+    color: #fbbf24;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
 }
 
 QLabel#MutedLabel {
-    color: #8b96b4;
+    color: #8e8e98;
     font-size: 11.5px;
 }
 
+/* --- Text Inputs & Lists --- */
 QPlainTextEdit {
-    background-color: #0d1018;
-    border: 1px solid #232a3e;
-    border-radius: 10px;
-    padding: 10px;
-    color: #f1f5f9;
+    background-color: #111113;
+    border: 1px solid #27272c;
+    border-radius: 8px;
+    padding: 10px 11px;
+    color: #f4f4f5;
     font-size: 13.5px;
-    selection-background-color: #4f46e5;
+    selection-background-color: #3f3f46;
     selection-color: #ffffff;
 }
 
 QPlainTextEdit:focus {
-    border: 1px solid #6366f1;
+    border: 1px solid #52525b;
 }
 
 QListWidget {
-    background-color: #0d1018;
-    border: 1px solid #232a3e;
-    border-radius: 10px;
+    background-color: #111113;
+    border: 1px solid #27272c;
+    border-radius: 8px;
     padding: 4px;
     outline: none;
 }
 
 QListWidget::item {
     padding: 8px 10px;
-    border-radius: 7px;
+    border-radius: 6px;
     margin-bottom: 2px;
-    color: #dbe3f4;
+    color: #d4d4d8;
 }
 
 QListWidget::item:selected {
-    background-color: rgba(99, 102, 241, 0.28);
+    background-color: #27272d;
     color: #ffffff;
 }
 
 QListWidget::item:hover:!selected {
-    background-color: #191f30;
+    background-color: #1c1c21;
 }
 
 QSplitter::handle {
     background-color: transparent;
-    width: 6px;
+    width: 8px;
 }
 
+/* --- Buttons --- */
 QPushButton {
-    background-color: #1e2436;
-    border: 1px solid #2e3650;
-    border-radius: 8px;
+    background-color: #222227;
+    border: 1px solid #32323a;
+    border-radius: 7px;
     padding: 6px 12px;
-    color: #e2e8f0;
+    color: #e4e4e7;
     font-weight: 500;
 }
 
 QPushButton:hover {
-    background-color: #272f46;
-    border-color: #445075;
+    background-color: #2c2c33;
+    border-color: #44444e;
+    color: #ffffff;
 }
 
 QPushButton:pressed {
-    background-color: #181d2c;
+    background-color: #1c1c21;
 }
 
 QPushButton:disabled {
-    color: #56607a;
-    background-color: #151926;
-    border-color: #202638;
+    color: #52525b;
+    background-color: #19191d;
+    border-color: #242429;
 }
 
 QPushButton#PrimaryButton {
-    background-color: #4f46e5;
-    border: 1px solid #6366f1;
-    color: #ffffff;
+    background-color: #f4f4f5;
+    border: 1px solid #f4f4f5;
+    color: #09090b;
     font-weight: 600;
     padding: 6px 15px;
 }
 
 QPushButton#PrimaryButton:hover {
-    background-color: #5b52f0;
+    background-color: #ffffff;
+    border-color: #ffffff;
+    color: #09090b;
 }
 
 QPushButton#PrimaryButton:pressed {
-    background-color: #4338ca;
+    background-color: #d4d4d8;
+    border-color: #d4d4d8;
 }
 
-QPushButton#AIButton {
-    background-color: rgba(139, 92, 246, 0.17);
-    border: 1px solid rgba(167, 139, 250, 0.42);
-    color: #ddd6fe;
-    font-weight: 600;
+QPushButton#PrimaryButton:disabled {
+    background-color: #27272c;
+    border-color: #2e2e34;
+    color: #52525b;
 }
 
-QPushButton#AIButton:hover {
-    background-color: rgba(139, 92, 246, 0.28);
+QPushButton#AIButton, QPushButton#TranslateButton {
+    background-color: #222227;
+    border: 1px solid #32323a;
+    color: #e4e4e7;
+    font-weight: 500;
 }
 
-QPushButton#TranslateButton {
-    background-color: rgba(14, 165, 233, 0.16);
-    border: 1px solid rgba(56, 189, 248, 0.42);
-    color: #bae6fd;
-    font-weight: 600;
-}
-
-QPushButton#TranslateButton:hover {
-    background-color: rgba(14, 165, 233, 0.28);
+QPushButton#AIButton:hover, QPushButton#TranslateButton:hover {
+    background-color: #2c2c33;
+    border-color: #484852;
+    color: #ffffff;
 }
 
 QPushButton#IconButton {
@@ -239,106 +282,156 @@ QPushButton#IconButton {
     border: 1px solid transparent;
     border-radius: 6px;
     padding: 4px 7px;
-    color: #9ba6c4;
-    font-size: 12.5px;
+    color: #a1a1aa;
+    font-size: 12px;
 }
 
 QPushButton#IconButton:hover {
-    background-color: #242b40;
-    color: #f8fafc;
+    background-color: #26262c;
+    color: #f4f4f5;
 }
 
 QPushButton#IconButton:checked {
-    background-color: rgba(99, 102, 241, 0.25);
-    border-color: rgba(129, 140, 248, 0.45);
-    color: #c7d2fe;
+    background-color: #2c2c33;
+    border-color: #3f3f48;
+    color: #f4f4f5;
 }
 
+/* --- Form Controls --- */
 QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {
-    background-color: #0d1018;
-    border: 1px solid #283047;
-    border-radius: 8px;
-    padding: 5px 9px;
-    color: #f1f5f9;
+    background-color: #111113;
+    border: 1px solid #2b2b32;
+    border-radius: 7px;
+    padding: 5px 10px;
+    color: #f4f4f5;
+}
+
+QComboBox {
+    padding-right: 24px;
 }
 
 QComboBox#CompactCombo {
-    padding: 3px 8px;
+    padding: 3px 22px 3px 8px;
     font-size: 11.5px;
     border-radius: 6px;
-    background-color: #151a27;
+    background-color: #1b1b20;
+    border-color: #292930;
+    color: #d4d4d8;
+}
+
+QComboBox:hover, QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover {
+    border-color: #3f3f48;
 }
 
 QComboBox:focus, QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
-    border-color: #6366f1;
+    border-color: #71717a;
 }
 
 QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 24px;
     border: none;
+    background: transparent;
+}
+
+QComboBox::down-arrow {
+    image: none;
+    width: 0px;
+    height: 0px;
+}
+
+QSpinBox::up-button, QDoubleSpinBox::up-button,
+QSpinBox::down-button, QDoubleSpinBox::down-button {
+    subcontrol-origin: border;
     width: 20px;
+    border: none;
+    background: transparent;
+}
+
+QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+    background-color: #26262c;
+    border-radius: 3px;
+}
+
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow,
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+    image: none;
+    width: 0px;
+    height: 0px;
 }
 
 QComboBox QAbstractItemView {
-    background-color: #161a26;
-    border: 1px solid #2f3750;
-    selection-background-color: #4f46e5;
-    color: #f1f5f9;
-    padding: 3px;
+    background-color: #18181b;
+    border: 1px solid #32323a;
+    border-radius: 7px;
+    selection-background-color: #2c2c34;
+    selection-color: #ffffff;
+    color: #e4e4e7;
+    padding: 4px;
+    outline: none;
 }
 
 QGroupBox {
-    border: 1px solid #232a3e;
-    border-radius: 10px;
-    margin-top: 12px;
-    padding: 12px 10px 10px 10px;
+    background-color: #141417;
+    border: 1px solid #25252b;
+    border-radius: 9px;
+    margin-top: 14px;
+    padding: 14px 12px 12px 12px;
     font-weight: 600;
-    color: #cbd5e1;
+    color: #d4d4d8;
 }
 
 QGroupBox::title {
     subcontrol-origin: margin;
     left: 12px;
     padding: 0 6px;
-    color: #a5b4fc;
+    color: #a1a1aa;
+    font-size: 12px;
+    font-weight: 600;
 }
 
 QProgressBar {
-    background-color: #1a1f2e;
+    background-color: #222227;
     border: none;
-    border-radius: 2px;
-    height: 3px;
+    height: 2px;
 }
 
 QProgressBar::chunk {
-    background-color: #6366f1;
-    border-radius: 2px;
+    background-color: #e4e4e7;
 }
 
 QCheckBox {
     spacing: 8px;
+    color: #e4e4e7;
 }
 
+/* --- Minimal Underline Tabs --- */
 QTabWidget::pane {
-    border: 1px solid #232a3e;
-    border-radius: 10px;
-    background-color: #131722;
-    padding: 8px;
+    border: none;
+    border-top: 1px solid #26262c;
+    background-color: transparent;
+    padding-top: 10px;
 }
 
 QTabBar::tab {
-    background-color: #181d2b;
-    border: 1px solid #232a3e;
-    border-bottom: none;
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
-    padding: 7px 14px;
+    background-color: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 8px 14px;
     margin-right: 4px;
-    color: #9ba6c4;
+    color: #8e8e98;
+    font-weight: 500;
+}
+
+QTabBar::tab:hover {
+    color: #e4e4e7;
 }
 
 QTabBar::tab:selected {
-    background-color: #21283d;
     color: #ffffff;
+    border-bottom: 2px solid #f4f4f5;
     font-weight: 600;
 }
 
@@ -349,18 +442,18 @@ QScrollArea {
 
 QScrollBar:vertical {
     background: transparent;
-    width: 8px;
+    width: 7px;
     margin: 2px 0;
 }
 
 QScrollBar::handle:vertical {
-    background: #2d354d;
-    border-radius: 4px;
+    background: #32323a;
+    border-radius: 3px;
     min-height: 24px;
 }
 
 QScrollBar::handle:vertical:hover {
-    background: #434f73;
+    background: #4b4b56;
 }
 
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
@@ -371,39 +464,170 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
 """
 
 
+class SleekProxyStyle(QProxyStyle):
+    """Draws crisp anti-aliased dropdown chevrons and modern checkboxes natively."""
+
+    def drawPrimitive(
+        self,
+        element: QStyle.PrimitiveElement,
+        option: QStyleOption | None,
+        painter: QPainter | None,
+        widget: QWidget | None = None,
+    ) -> None:
+        if option is not None and painter is not None:
+            if element == QStyle.PrimitiveElement.PE_IndicatorArrowDown:
+                self._draw_chevron(painter, option.rect, direction="down")
+                return
+            if element == QStyle.PrimitiveElement.PE_IndicatorArrowUp:
+                self._draw_chevron(painter, option.rect, direction="up")
+                return
+            if element == QStyle.PrimitiveElement.PE_IndicatorArrowRight:
+                self._draw_chevron(painter, option.rect, direction="right")
+                return
+            if element == QStyle.PrimitiveElement.PE_IndicatorCheckBox:
+                self._draw_checkbox(painter, option)
+                return
+        super().drawPrimitive(element, option, painter, widget)
+
+    @staticmethod
+    def _draw_chevron(painter: QPainter, rect, direction: str) -> None:
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(
+            QColor("#a1a1aa"),
+            1.5,
+            Qt.PenStyle.SolidLine,
+            Qt.PenCapStyle.RoundCap,
+            Qt.PenJoinStyle.RoundJoin,
+        )
+        painter.setPen(pen)
+        cx = rect.center().x()
+        cy = rect.center().y()
+        if direction == "down":
+            painter.drawPolyline([QPointF(cx - 3.5, cy - 1.5), QPointF(cx, cy + 2.0), QPointF(cx + 3.5, cy - 1.5)])
+        elif direction == "up":
+            painter.drawPolyline([QPointF(cx - 3.5, cy + 1.5), QPointF(cx, cy - 2.0), QPointF(cx + 3.5, cy + 1.5)])
+        else:
+            painter.drawPolyline([QPointF(cx - 1.5, cy - 3.5), QPointF(cx + 2.0, cy), QPointF(cx - 1.5, cy + 3.5)])
+        painter.restore()
+
+    @staticmethod
+    def _draw_checkbox(painter: QPainter, option: QStyleOption) -> None:
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        r = QRectF(option.rect).adjusted(1.0, 1.0, -1.0, -1.0)
+        checked = bool(option.state & QStyle.StateFlag.State_On)
+        hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
+
+        if checked:
+            painter.setBrush(QColor("#f4f4f5"))
+            painter.setPen(QPen(QColor("#f4f4f5"), 1.2))
+            painter.drawRoundedRect(r, 4.0, 4.0)
+            pen = QPen(
+                QColor("#09090b"),
+                1.8,
+                Qt.PenStyle.SolidLine,
+                Qt.PenCapStyle.RoundCap,
+                Qt.PenJoinStyle.RoundJoin,
+            )
+            painter.setPen(pen)
+            cx, cy = r.center().x(), r.center().y()
+            painter.drawPolyline(
+                [QPointF(cx - 3.2, cy + 0.2), QPointF(cx - 0.8, cy + 2.7), QPointF(cx + 3.6, cy - 2.5)]
+            )
+        else:
+            painter.setBrush(QColor("#111113"))
+            painter.setPen(QPen(QColor("#52525b" if hovered else "#3a3a43"), 1.2))
+            painter.drawRoundedRect(r, 4.0, 4.0)
+        painter.restore()
+
+
+class _ChevronDecorator(QObject):
+    """Paints razor-sharp vector chevrons on QComboBox and QAbstractSpinBox widgets."""
+
+    def eventFilter(self, obj: QObject | None, event: QEvent | None) -> bool:
+        if event is not None and event.type() == QEvent.Type.Paint and isinstance(obj, QWidget):
+            # Let the widget finish its normal paint first, then paint crisp chevrons on top
+            obj.removeEventFilter(self)
+            try:
+                obj.event(event)
+                self._paint_overlay(obj)
+            finally:
+                obj.installEventFilter(self)
+            return True
+        return False
+
+    @staticmethod
+    def _paint_overlay(widget: QWidget) -> None:
+        painter = QPainter(widget)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        color = QColor("#8e8e98" if widget.isEnabled() else "#52525b")
+        pen = QPen(color, 1.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+
+        if isinstance(widget, QComboBox):
+            cx = widget.width() - 12.5
+            cy = widget.height() / 2.0
+            painter.drawPolyline(
+                [QPointF(cx - 3.3, cy - 1.4), QPointF(cx, cy + 2.0), QPointF(cx + 3.3, cy - 1.4)]
+            )
+        elif isinstance(widget, QAbstractSpinBox):
+            cx = widget.width() - 10.5
+            cy_up = widget.height() * 0.33
+            cy_dn = widget.height() * 0.67
+            painter.drawPolyline(
+                [QPointF(cx - 2.8, cy_up + 1.2), QPointF(cx, cy_up - 1.5), QPointF(cx + 2.8, cy_up + 1.2)]
+            )
+            painter.drawPolyline(
+                [QPointF(cx - 2.8, cy_dn - 1.2), QPointF(cx, cy_dn + 1.5), QPointF(cx + 2.8, cy_dn - 1.2)]
+            )
+        painter.end()
+
+
+def apply_sleek_theme(root: QWidget) -> None:
+    """Apply stylesheet and attach crisp chevron decorators to all combos/spinboxes in `root`."""
+    root.setStyleSheet(DARK_STYLESHEET)
+    decorator = _ChevronDecorator(root)
+    setattr(root, "_sleek_chevron_decorator", decorator)
+    for combo in root.findChildren(QComboBox):
+        combo.installEventFilter(decorator)
+    for spin in root.findChildren(QAbstractSpinBox):
+        spin.installEventFilter(decorator)
+
+
 def create_app_icon(size: int = 64) -> QIcon:
-    """Render a crisp vector icon (indigo badge with crop corners + 'A' OCR motif)."""
+    """Render a minimal monochrome graphite & white OCR viewfinder app icon."""
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
 
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    grad = QLinearGradient(0, 0, size, size)
-    grad.setColorAt(0.0, QColor("#6366f1"))
-    grad.setColorAt(1.0, QColor("#3b82f6"))
-    painter.setBrush(grad)
-    painter.setPen(Qt.PenStyle.NoPen)
+    # Sleek charcoal tile with crisp hairline border (no neon gradients)
+    painter.setBrush(QColor("#18181b"))
+    painter.setPen(QPen(QColor("#3f3f46"), max(1.2, size * 0.03)))
     radius = size * 0.24
-    painter.drawRoundedRect(QRectF(2, 2, size - 4, size - 4), radius, radius)
+    inset = max(1.5, size * 0.035)
+    painter.drawRoundedRect(QRectF(inset, inset, size - inset * 2, size - inset * 2), radius, radius)
 
-    pen = QPen(QColor("#ffffff"))
+    # Crisp white crop viewfinder corners
+    pen = QPen(QColor("#f4f4f5"))
     pen.setWidthF(max(2.0, size * 0.065))
     pen.setCapStyle(Qt.PenCapStyle.RoundCap)
     painter.setPen(pen)
 
-    m = size * 0.19
+    m = size * 0.20
     arm = size * 0.16
-    painter.drawLine(int(m), int(m), int(m + arm), int(m))
-    painter.drawLine(int(m), int(m), int(m), int(m + arm))
-    painter.drawLine(int(size - m), int(m), int(size - m - arm), int(m))
-    painter.drawLine(int(size - m), int(m), int(size - m), int(m + arm))
-    painter.drawLine(int(m), int(size - m), int(m + arm), int(size - m))
-    painter.drawLine(int(m), int(size - m), int(m), int(size - m - arm))
-    painter.drawLine(int(size - m), int(size - m), int(size - m - arm), int(size - m))
-    painter.drawLine(int(size - m), int(size - m), int(size - m), int(size - m - arm))
+    painter.drawLine(QPointF(m, m), QPointF(m + arm, m))
+    painter.drawLine(QPointF(m, m), QPointF(m, m + arm))
+    painter.drawLine(QPointF(size - m, m), QPointF(size - m - arm, m))
+    painter.drawLine(QPointF(size - m, m), QPointF(size - m, m + arm))
+    painter.drawLine(QPointF(m, size - m), QPointF(m + arm, size - m))
+    painter.drawLine(QPointF(m, size - m), QPointF(m, size - m - arm))
+    painter.drawLine(QPointF(size - m, size - m), QPointF(size - m - arm, size - m))
+    painter.drawLine(QPointF(size - m, size - m), QPointF(size - m, size - m - arm))
 
-    font = QFont("Segoe UI", int(size * 0.34), QFont.Weight.Bold)
+    font = QFont("Segoe UI", max(8, int(size * 0.34)), QFont.Weight.DemiBold)
     painter.setFont(font)
     painter.setPen(QColor("#ffffff"))
     painter.drawText(QRectF(0, 0, size, size), Qt.AlignmentFlag.AlignCenter, "A")
