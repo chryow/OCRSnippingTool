@@ -17,8 +17,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ocr_snip.formatting import unwrap_paragraphs
 from ocr_snip.ocr.base import OCRResult
 from ocr_snip.ocr.local_rapidocr import SCRIPT_PROFILES
+from ocr_snip.ocr.vision_ai import AI_OUTPUT_FORMATS
 from ocr_snip.translate import TARGET_LANGUAGES, TranslationResult
 from ocr_snip.ui.theme import DARK_STYLESHEET
 
@@ -27,9 +29,10 @@ class ResultPopup(QWidget):
     """Frameless floating card showing extracted text, detected language, and quick actions."""
 
     new_snip_requested = pyqtSignal()
+    history_requested = pyqtSignal()
     settings_requested = pyqtSignal()
     rescan_script_requested = pyqtSignal(str)
-    enhance_ai_requested = pyqtSignal()
+    enhance_ai_requested = pyqtSignal(str)      # ai_output_format: "text" | "markdown" | "latex"
     translate_requested = pyqtSignal(str, str)  # (text, target_lang_code)
     target_language_changed = pyqtSignal(str)   # target_lang_code
 
@@ -39,6 +42,7 @@ class ResultPopup(QWidget):
         self._pinned = True
         self._updating_combo = False
         self._updating_target_combo = False
+        self._raw_ocr_text: str = ""
         self._auto_close_timer = QTimer(self)
         self._auto_close_timer.setSingleShot(True)
         self._auto_close_timer.timeout.connect(self._on_auto_close)
@@ -61,9 +65,9 @@ class ResultPopup(QWidget):
             | Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setMinimumWidth(480)
-        self.setMaximumWidth(660)
-        self.resize(520, 380)
+        self.setMinimumWidth(520)
+        self.setMaximumWidth(700)
+        self.resize(560, 400)
         self.setStyleSheet(DARK_STYLESHEET)
 
     def _build_ui(self) -> None:
@@ -106,6 +110,12 @@ class ResultPopup(QWidget):
         self.snip_btn.setToolTip("Capture a new region")
         self.snip_btn.clicked.connect(self.new_snip_requested.emit)
         header_layout.addWidget(self.snip_btn)
+
+        self.history_btn = QPushButton("🕒")
+        self.history_btn.setObjectName("IconButton")
+        self.history_btn.setToolTip("Open Snip History")
+        self.history_btn.clicked.connect(self.history_requested.emit)
+        header_layout.addWidget(self.history_btn)
 
         self.pin_btn = QPushButton("📌")
         self.pin_btn.setObjectName("IconButton")
@@ -161,6 +171,14 @@ class ResultPopup(QWidget):
         meta_row.addWidget(self.stats_pill)
 
         meta_row.addStretch()
+
+        self.unwrap_btn = QPushButton("¶ Unwrap")
+        self.unwrap_btn.setObjectName("IconButton")
+        self.unwrap_btn.setCheckable(True)
+        self.unwrap_btn.setToolTip("Merge hard PDF/article line breaks into flowing paragraphs")
+        self.unwrap_btn.toggled.connect(self._on_unwrap_toggled)
+        meta_row.addWidget(self.unwrap_btn)
+
         body_layout.addLayout(meta_row)
 
         # Optional note / error pill
@@ -235,7 +253,7 @@ class ResultPopup(QWidget):
 
         # Bottom controls row
         footer = QHBoxLayout()
-        footer.setSpacing(8)
+        footer.setSpacing(6)
 
         self.script_combo = QComboBox()
         self.script_combo.setToolTip("Re-scan this snip with a specific offline script model")
@@ -244,10 +262,16 @@ class ResultPopup(QWidget):
         self.script_combo.currentIndexChanged.connect(self._on_script_changed)
         footer.addWidget(self.script_combo, stretch=1)
 
-        self.ai_btn = QPushButton("✨ AI Enhance")
+        self.ai_format_combo = QComboBox()
+        self.ai_format_combo.setToolTip("Vision AI output format (Plain Text, Markdown Tables, or Math LaTeX)")
+        for code, label in AI_OUTPUT_FORMATS:
+            self.ai_format_combo.addItem(label, userData=code)
+        footer.addWidget(self.ai_format_combo)
+
+        self.ai_btn = QPushButton("✨ AI")
         self.ai_btn.setObjectName("AIButton")
-        self.ai_btn.setToolTip("Re-extract using Vision AI (Gemini / OpenAI / Ollama)")
-        self.ai_btn.clicked.connect(self.enhance_ai_requested.emit)
+        self.ai_btn.setToolTip("Re-extract using Vision AI in the selected format")
+        self.ai_btn.clicked.connect(self._on_enhance_ai_clicked)
         footer.addWidget(self.ai_btn)
 
         self.copy_btn = QPushButton("Copy")
@@ -271,12 +295,14 @@ class ResultPopup(QWidget):
         self.copied_badge.hide()
         self.note_label.hide()
         self.translate_panel.hide()
+        self.unwrap_btn.setEnabled(False)
         self.lang_pill.setText(f"🌐 {message}")
         self.lang_pill.setToolTip("")
         self.engine_pill.setText("Processing...")
         self.stats_pill.hide()
         self.text_edit.setReadOnly(True)
         self.script_combo.setEnabled(False)
+        self.ai_format_combo.setEnabled(False)
         self.ai_btn.setEnabled(False)
         self.copy_btn.setEnabled(False)
         self.translate_btn.setEnabled(False)
@@ -299,10 +325,18 @@ class ResultPopup(QWidget):
         self.progress.hide()
         self.text_edit.setReadOnly(False)
         self.script_combo.setEnabled(True)
+        self.ai_format_combo.setEnabled(True)
         self.ai_btn.setEnabled(True)
         self.copy_btn.setEnabled(True)
-        self.translate_btn.setEnabled(bool(result.text.strip()))
+        has_text = bool(result.text.strip())
+        self.translate_btn.setEnabled(has_text)
+        self.unwrap_btn.setEnabled(has_text)
         self.translate_panel.hide()
+
+        self._raw_ocr_text = result.text
+        self.unwrap_btn.blockSignals(True)
+        self.unwrap_btn.setChecked(False)
+        self.unwrap_btn.blockSignals(False)
 
         # Set extracted text
         self.text_edit.setPlainText(result.text)
@@ -384,6 +418,22 @@ class ResultPopup(QWidget):
             self._updating_target_combo = True
             self.target_lang_combo.setCurrentIndex(idx)
             self._updating_target_combo = False
+
+    def set_ai_output_format(self, fmt: str) -> None:
+        idx = self.ai_format_combo.findData(fmt)
+        if idx >= 0:
+            self.ai_format_combo.setCurrentIndex(idx)
+
+    def _on_unwrap_toggled(self, checked: bool) -> None:
+        if checked:
+            self._raw_ocr_text = self.text_edit.toPlainText()
+            self.text_edit.setPlainText(unwrap_paragraphs(self._raw_ocr_text))
+        else:
+            self.text_edit.setPlainText(self._raw_ocr_text)
+
+    def _on_enhance_ai_clicked(self) -> None:
+        fmt = str(self.ai_format_combo.currentData() or "text")
+        self.enhance_ai_requested.emit(fmt)
 
     def show_translation_loading(self, target_label: str) -> None:
         self._auto_close_timer.stop()

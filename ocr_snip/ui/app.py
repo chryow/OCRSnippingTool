@@ -16,12 +16,15 @@ from ocr_snip import __app_name__, __version__
 from ocr_snip.capture.hotkey import GlobalHotkeyBridge, format_hotkey_display
 from ocr_snip.capture.screenshot import capture_virtual_desktop
 from ocr_snip.config import AppConfig
+from ocr_snip.history import HistoryStore
 from ocr_snip.language import language_name
 from ocr_snip.logging_utils import get_logs_dir, install_crash_handler, setup_logging
 from ocr_snip.ocr.base import OCRResult
+from ocr_snip.ocr.local_rapidocr import LocalRapidOCREngine
 from ocr_snip.ocr.manager import OCRManager
 from ocr_snip.single_instance import SingleInstanceGuard
 from ocr_snip.translate import TranslationResult, Translator
+from ocr_snip.ui.history_dialog import HistoryDialog
 from ocr_snip.ui.overlay import SnipOverlay
 from ocr_snip.ui.result_popup import ResultPopup
 from ocr_snip.ui.settings_dialog import SettingsDialog
@@ -51,6 +54,7 @@ class OCRWorker(QThread):
         *,
         force_engine: str | None = None,
         script_override: str | None = None,
+        ai_output_format: str | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -58,12 +62,14 @@ class OCRWorker(QThread):
         self._image = image
         self._force_engine = force_engine
         self._script_override = script_override
+        self._ai_output_format = ai_output_format
 
     def run(self) -> None:
         result = self._manager.recognize(
             self._image,
             force_engine=self._force_engine,
             script_override=self._script_override,
+            ai_output_format=self._ai_output_format,
         )
         self.finished_result.emit(result)
 
@@ -91,13 +97,14 @@ class TranslateWorker(QThread):
 
 
 class OCRSnippingApp(QObject):
-    """Top-level controller coordinating tray icon, hotkey, overlay, popup, OCR, and translation."""
+    """Top-level controller coordinating tray, hotkey, overlay, popup, history, OCR & translation."""
 
     def __init__(
         self,
         qt_app: QApplication,
         config: AppConfig | None = None,
         instance_guard: SingleInstanceGuard | None = None,
+        history_store: HistoryStore | None = None,
     ) -> None:
         super().__init__()
         self.qt_app = qt_app
@@ -112,19 +119,24 @@ class OCRSnippingApp(QObject):
         self.config = config or AppConfig.load()
         self.manager = OCRManager(self.config)
         self.translator = Translator(self.config)
+        self.history = history_store or HistoryStore(max_entries=self.config.history_max_entries)
         self._instance_guard = instance_guard
 
         self._overlay: SnipOverlay | None = None
+        self._history_dialog: HistoryDialog | None = None
         self._snip_pending: bool = False
         self._settings_open: bool = False
         self._worker: OCRWorker | None = None
         self._translate_worker: TranslateWorker | None = None
         self._last_image: Image.Image | None = None
         self._last_anchor: QPoint | None = None
+        self._last_history_id: str | None = None
 
         self.popup = ResultPopup()
         self.popup.set_target_language(self.config.translate_target_lang)
+        self.popup.set_ai_output_format(self.config.ai_output_format)
         self.popup.new_snip_requested.connect(self.start_snip)
+        self.popup.history_requested.connect(self.open_history)
         self.popup.settings_requested.connect(self.open_settings)
         self.popup.rescan_script_requested.connect(self.rescan_with_script)
         self.popup.enhance_ai_requested.connect(self.enhance_with_ai)
@@ -149,6 +161,16 @@ class OCRSnippingApp(QObject):
         self.snip_action.triggered.connect(self.start_snip)
         self._tray_menu.addAction(self.snip_action)
 
+        delay3_action = QAction("⏱ Delayed Snip (3 seconds)", self)
+        delay3_action.triggered.connect(lambda: self.start_delayed_snip(3))
+        self._tray_menu.addAction(delay3_action)
+
+        delay5_action = QAction("⏱ Delayed Snip (5 seconds)", self)
+        delay5_action.triggered.connect(lambda: self.start_delayed_snip(5))
+        self._tray_menu.addAction(delay5_action)
+
+        self._tray_menu.addSeparator()
+
         clip_action = QAction("📋 Extract from Clipboard Image", self)
         clip_action.triggered.connect(self.ocr_from_clipboard)
         self._tray_menu.addAction(clip_action)
@@ -156,6 +178,10 @@ class OCRSnippingApp(QObject):
         file_action = QAction("🖼 Extract from Image File...", self)
         file_action.triggered.connect(self.ocr_from_file)
         self._tray_menu.addAction(file_action)
+
+        history_action = QAction("🕒 Snip History...", self)
+        history_action.triggered.connect(self.open_history)
+        self._tray_menu.addAction(history_action)
 
         self._tray_menu.addSeparator()
 
@@ -211,6 +237,14 @@ class OCRSnippingApp(QObject):
     def open_logs_folder(self) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(get_logs_dir())))
 
+    def open_history(self, _checked: bool = False) -> None:
+        if self._history_dialog is None:
+            self._history_dialog = HistoryDialog(self.history)
+        self._history_dialog.refresh()
+        self._history_dialog.show()
+        self._history_dialog.raise_()
+        self._history_dialog.activateWindow()
+
     def start_snip(self) -> None:
         """Freeze the desktop and show the fullscreen snipping selection overlay."""
         if self._overlay is not None or self._snip_pending:
@@ -219,6 +253,22 @@ class OCRSnippingApp(QObject):
         self.popup.hide()
         # Allow popup window to vanish cleanly before grabbing screenshot
         QTimer.singleShot(90, self._launch_overlay)
+
+    def start_delayed_snip(self, seconds: int = 3) -> None:
+        """Wait `seconds` before freezing the screen — ideal for capturing hover tooltips/menus."""
+        if self._overlay is not None or self._snip_pending:
+            return
+        self._snip_pending = True
+        self.popup.hide()
+        delay_sec = max(1, seconds)
+        if self.tray.supportsMessages():
+            self.tray.showMessage(
+                f"{__app_name__} — Delayed Snip",
+                f"Capturing screen in {delay_sec} seconds — open your menu or tooltip now.",
+                self.icon,
+                min(delay_sec * 1000, 2500),
+            )
+        QTimer.singleShot(delay_sec * 1000, self._launch_overlay)
 
     def _launch_overlay(self) -> None:
         self._snip_pending = False
@@ -298,18 +348,20 @@ class OCRSnippingApp(QObject):
             loading_msg=f"Scanning ({script_key})...",
         )
 
-    def enhance_with_ai(self) -> None:
+    def enhance_with_ai(self, ai_output_format: str = "text") -> None:
         if self._last_image is None:
             return
         if not self.config.is_vision_ai_configured():
-            self.open_settings(initial_tab=2)
+            self.open_settings(initial_tab=3)
             if not self.config.is_vision_ai_configured():
                 return
+        fmt_label = f" [{ai_output_format}]" if ai_output_format != "text" else ""
         self._run_ocr(
             self._last_image,
             anchor=self._last_anchor,
             force_engine="vision_ai",
-            loading_msg=f"Enhancing with {self.config.ai_provider.title()} AI...",
+            ai_output_format=ai_output_format,
+            loading_msg=f"Enhancing with {self.config.ai_provider.title()} AI{fmt_label}...",
         )
 
     def _on_popup_target_lang_changed(self, target_code: str) -> None:
@@ -339,6 +391,13 @@ class OCRSnippingApp(QObject):
         self._translate_worker = None
         if not result.ok:
             logger.warning("Translation failed: %s", result.error)
+        else:
+            if self._last_history_id and result.translated_text.strip():
+                self.history.update_translation(
+                    self._last_history_id, result.translated_text, result.target_language
+                )
+                if self._history_dialog is not None and self._history_dialog.isVisible():
+                    self._history_dialog.refresh()
         self.popup.show_translation_result(result)
 
     def _run_ocr(
@@ -348,6 +407,7 @@ class OCRSnippingApp(QObject):
         anchor: QPoint | None,
         force_engine: str | None = None,
         script_override: str | None = None,
+        ai_output_format: str | None = None,
         loading_msg: str = "Extracting text...",
     ) -> None:
         if self._worker is not None and self._worker.isRunning():
@@ -361,6 +421,7 @@ class OCRSnippingApp(QObject):
             image,
             force_engine=force_engine,
             script_override=script_override,
+            ai_output_format=ai_output_format,
             parent=self,
         )
         worker.finished_result.connect(self._on_ocr_finished)
@@ -374,6 +435,17 @@ class OCRSnippingApp(QObject):
 
         if not result.ok:
             logger.warning("OCR failed (%s): %s", result.engine_name, result.error)
+
+        if result.ok and result.text.strip():
+            entry = self.history.add(
+                text=result.text,
+                language=result.language_summary,
+                engine=result.engine_name,
+                confidence=result.confidence,
+            )
+            self._last_history_id = entry.id if entry else None
+            if self._history_dialog is not None and self._history_dialog.isVisible():
+                self._history_dialog.refresh()
 
         if self.config.auto_copy and result.text.strip():
             clipboard = QGuiApplication.clipboard()
@@ -408,7 +480,12 @@ class OCRSnippingApp(QObject):
             return
         self._settings_open = True
         try:
-            dialog = SettingsDialog(self.config)
+            local_eng = (
+                self.manager.local_engine
+                if isinstance(self.manager.local_engine, LocalRapidOCREngine)
+                else None
+            )
+            dialog = SettingsDialog(self.config, local_engine=local_eng)
             if 0 <= initial_tab < dialog.tabs.count():
                 dialog.tabs.setCurrentIndex(initial_tab)
             if dialog.exec():
@@ -417,6 +494,7 @@ class OCRSnippingApp(QObject):
                 self.manager.update_config(self.config)
                 self.translator.update_config(self.config)
                 self.popup.set_target_language(self.config.translate_target_lang)
+                self.popup.set_ai_output_format(self.config.ai_output_format)
                 self._apply_hotkey()
         finally:
             self._settings_open = False
@@ -426,6 +504,8 @@ class OCRSnippingApp(QObject):
         self.hotkey.stop()
         if self._instance_guard is not None:
             self._instance_guard.stop()
+        if self._history_dialog is not None:
+            self._history_dialog.close()
         self.tray.hide()
         self.qt_app.quit()
 

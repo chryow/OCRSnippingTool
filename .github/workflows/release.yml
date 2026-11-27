@@ -177,11 +177,11 @@ jobs:
           | **Linux (x64)** | `OCRSnippingTool-Linux-x64.tar.gz` | Extract (`tar -xzf OCRSnippingTool-Linux-x64.tar.gz`) and run `./OCRSnippingTool/OCRSnippingTool`. |
 
           ### Highlights
-          - **Win+Shift+S style snipping overlay** with multi-monitor HiDPI support
-          - **Hybrid AI/ML OCR**: Offline RapidOCR (ONNX PP-OCRv6 universal + PP-OCRv5 100+ language scripts) + optional **Gemini / OpenAI / Ollama** Vision AI
+          - **Win+Shift+S style snipping overlay** with multi-monitor HiDPI support + **3s / 5s Delayed Snip** (for capturing dropdown menus & hover tooltips)
+          - **Hybrid AI/ML OCR + Offline Language Pack Manager**: Offline RapidOCR (ONNX PP-OCRv6 universal + downloadable PP-OCRv5 packs with **Smart Offline Auto-Probe**) + optional **Gemini / OpenAI / Ollama** Vision AI supporting **Plain Text**, **Markdown / Tables**, and **Math / LaTeX** output modes
           - **Automatic multilingual language detection** (70+ languages, single & mixed scripts)
           - **Built-in 1-Click Translation** (25+ target languages right inside the floating popup — works out-of-the-box with zero API keys, or via your configured AI provider)
-          - **Instant clipboard auto-copy + floating preview/edit popup**
+          - **Floating preview/edit popup + 1-click `¶ Unwrap`** (cleanly joins hard PDF/article line breaks) + **Searchable Snip History (`🕒`)** with Favorites/Pinning
           - **Single-instance guard & diagnostic logging**: re-launching the app triggers a new snip instead of duplicate tray icons, and rotating crash/diagnostic logs are accessible via **Tray → Open Logs Folder**
           - Models cache persistently in your user data folder on first run (`%APPDATA%\OCRSnippingTool\models` on Windows, `~/Library/Application Support/OCRSnippingTool/models` on macOS, `~/.config/OCRSnippingTool/models` on Linux).
           EOF

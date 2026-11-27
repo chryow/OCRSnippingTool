@@ -52,10 +52,12 @@ class AppConfig:
     engine_mode: str = "hybrid"
 
     # Local OCR script profile:
-    # "auto" (runs universal multi-script / tries best match),
-    # or explicit script key: "multilingual_cjk", "latin", "korean", "cyrillic",
+    # "auto" (runs universal multi-script + auto-probes installed offline packs when low confidence),
+    # or explicit script key: "latin", "korean", "eslav", "cyrillic",
     # "arabic", "devanagari", "thai", "greek", "tamil", "telugu"
     local_script: str = "auto"
+    auto_probe_installed_scripts: bool = True
+    offline_probe_threshold: float = 0.72
 
     # Hybrid fallback confidence threshold (0.0 - 1.0): if local OCR average confidence
     # is below this and Vision AI is configured, automatically refine with Vision AI
@@ -63,6 +65,8 @@ class AppConfig:
 
     # Vision AI provider: "gemini" | "openai" | "ollama"
     ai_provider: str = "gemini"
+    # Vision AI output format: "text" | "markdown" | "latex"
+    ai_output_format: str = "text"
 
     # API keys / endpoints (also reads GEMINI_API_KEY / OPENAI_API_KEY env vars as fallback)
     gemini_api_key: str = ""
@@ -80,6 +84,7 @@ class AppConfig:
     show_popup: bool = True
     popup_auto_close_seconds: int = 0  # 0 = stay open until dismissed
     preserve_line_breaks: bool = True
+    history_max_entries: int = 100
 
     # Built-in 1-click translation preferences
     translate_target_lang: str = "en"
