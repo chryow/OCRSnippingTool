@@ -39,7 +39,8 @@ class HistoryDialog(QDialog):
 
         self.setWindowTitle("Snip History")
         self.setWindowIcon(create_app_icon(64))
-        self.resize(780, 500)
+        self.setMinimumSize(740, 480)
+        self.resize(900, 600)
 
         self._build_ui()
         apply_sleek_theme(self)

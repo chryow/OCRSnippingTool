@@ -103,6 +103,8 @@ class AppConfig:
     auto_copy: bool = True
     show_popup: bool = True
     popup_auto_close_seconds: int = 0  # 0 = stay open until dismissed
+    popup_width: int = 720
+    popup_height: int = 490
     preserve_line_breaks: bool = True
     history_max_entries: int = 100
 

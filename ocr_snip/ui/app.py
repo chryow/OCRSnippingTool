@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from PIL import Image
-from PyQt6.QtCore import QBuffer, QIODevice, QObject, QPoint, QThread, QTimer, QUrl, pyqtSignal
+from PyQt6.QtCore import QBuffer, QIODevice, QObject, QPoint, Qt, QThread, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QAction, QDesktopServices, QGuiApplication, QImage
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QMessageBox, QSystemTrayIcon
 
@@ -137,6 +137,7 @@ class OCRSnippingApp(QObject):
         self._last_history_id: str | None = None
 
         self.popup = ResultPopup()
+        self.popup.apply_saved_size(self.config.popup_width, self.config.popup_height)
         self.popup.set_target_language(self.config.translate_target_lang)
         self.popup.set_ai_output_format(self.config.ai_output_format)
         self.popup.new_snip_requested.connect(self.start_snip)
@@ -146,6 +147,7 @@ class OCRSnippingApp(QObject):
         self.popup.enhance_ai_requested.connect(self.enhance_with_ai)
         self.popup.translate_requested.connect(self.translate_text)
         self.popup.target_language_changed.connect(self._on_popup_target_lang_changed)
+        self.popup.size_changed.connect(self._on_popup_size_changed)
 
         self.hotkey = GlobalHotkeyBridge(self)
         self.hotkey.triggered.connect(self.start_snip)
@@ -158,9 +160,19 @@ class OCRSnippingApp(QObject):
         self._apply_hotkey()
         logger.info("%s v%s initialized (mode=%s)", __app_name__, __version__, self.config.engine_mode)
 
+    @staticmethod
+    def _configure_menu(menu: QMenu) -> None:
+        menu.setStyleSheet(DARK_STYLESHEET)
+        menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        menu.setWindowFlags(
+            menu.windowFlags()
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.NoDropShadowWindowHint
+        )
+
     def _setup_tray(self) -> None:
         self._tray_menu = QMenu()
-        self._tray_menu.setStyleSheet(DARK_STYLESHEET)
+        self._configure_menu(self._tray_menu)
 
         self.snip_action = QAction(svg_icon("snip", 15, "#e4e4e7"), "New Snip", self)
         self.snip_action.triggered.connect(self.start_snip)
@@ -168,7 +180,7 @@ class OCRSnippingApp(QObject):
 
         self._delay_menu = QMenu("Delayed Snip", self._tray_menu)
         self._delay_menu.setIcon(svg_icon("timer", 15, "#a1a1aa"))
-        self._delay_menu.setStyleSheet(DARK_STYLESHEET)
+        self._configure_menu(self._delay_menu)
 
         delay3_action = QAction("In 3 seconds", self._delay_menu)
         delay3_action.triggered.connect(lambda: self.start_delayed_snip(3))
@@ -377,6 +389,16 @@ class OCRSnippingApp(QObject):
             self.config.save()
         except Exception as exc:
             logger.warning("Could not persist target language preference: %s", exc)
+
+    def _on_popup_size_changed(self, width: int, height: int) -> None:
+        if self.config.popup_width == width and self.config.popup_height == height:
+            return
+        self.config.popup_width = width
+        self.config.popup_height = height
+        try:
+            self.config.save()
+        except Exception as exc:
+            logger.warning("Could not persist popup size: %s", exc)
 
     def translate_text(self, text: str, target_lang: str | None = None) -> None:
         if not text.strip():
