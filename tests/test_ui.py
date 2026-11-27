@@ -259,4 +259,53 @@ def test_app_controller_async_translation(qtbot, tmp_path) -> None:
         controller.popup.hide()
 
 
+def test_result_popup_preserves_text_on_ai_error_and_resets_placeholders(qtbot) -> None:
+    from ocr_snip.translate import TranslationResult
+
+    popup = ResultPopup()
+    qtbot.addWidget(popup)
+    popup.show()
+
+    popup.show_result(
+        OCRResult(
+            text="What does this mean?",
+            engine_name="Local ML",
+            confidence=0.96,
+            languages=[DetectedLanguage("en", "English")],
+        )
+    )
+    assert popup.text_edit.toPlainText() == "What does this mean?"
+
+    # Simulate clicking ✨ AI which fails with an API error
+    popup.show_loading(message="Enhancing with Gemini AI...", clear_text=False)
+    assert popup.progress.maximum() == 0
+    popup.show_result(
+        OCRResult(
+            text="",
+            engine_name="Vision AI (gemini)",
+            error="Gemini API HTTP 404: Model not found",
+        )
+    )
+    assert popup.text_edit.toPlainText() == "What does this mean?"
+    assert popup.translate_btn.isEnabled()
+    assert "English" in popup.lang_pill.text()
+    assert "404" in popup.note_label.text()
+    assert popup.progress.maximum() == 1
+    assert not popup.progress.isVisible()
+
+    # Translation failure resets placeholder so it never looks stuck on "Translating..."
+    popup.show_translation_loading("Indonesian")
+    assert popup.translated_edit.placeholderText() == "Translating..."
+    popup.show_translation_result(
+        TranslationResult(
+            translated_text="",
+            target_language="Indonesian",
+            error="Translation HTTP 429: Too Many Requests",
+        )
+    )
+    assert "failed" in popup.translated_edit.placeholderText().lower()
+    assert not popup.copy_trans_btn.isEnabled()
+
+
+
 

@@ -43,6 +43,10 @@ class ResultPopup(QWidget):
         self._updating_combo = False
         self._updating_target_combo = False
         self._raw_ocr_text: str = ""
+        self._prev_lang_text: str = ""
+        self._prev_lang_tooltip: str = ""
+        self._prev_engine_text: str = ""
+        self._prev_stats_text: str = ""
 
         self._auto_close_timer = QTimer(self)
         self._auto_close_timer.setSingleShot(True)
@@ -148,7 +152,8 @@ class ResultPopup(QWidget):
 
         # --- Progress Bar ---
         self.progress = QProgressBar()
-        self.progress.setRange(0, 0)
+        self.progress.setRange(0, 1)
+        self.progress.setValue(0)
         self.progress.setTextVisible(False)
         self.progress.setFixedHeight(3)
         self.progress.hide()
@@ -212,8 +217,8 @@ class ResultPopup(QWidget):
         tp_header.setSpacing(6)
         self.translate_meta_label = QLabel("Translation")
         self.translate_meta_label.setObjectName("MutedLabel")
-        tp_header.addWidget(self.translate_meta_label)
-        tp_header.addStretch()
+        self.translate_meta_label.setWordWrap(True)
+        tp_header.addWidget(self.translate_meta_label, stretch=1)
 
         self.copy_trans_btn = QPushButton("Copy Translation")
         self.copy_trans_btn.setObjectName("IconButton")
@@ -229,7 +234,7 @@ class ResultPopup(QWidget):
 
         self.translated_edit = QPlainTextEdit()
         self.translated_edit.setMaximumHeight(115)
-        self.translated_edit.setPlaceholderText("Translating...")
+        self.translated_edit.setPlaceholderText("Translated text...")
         tp_layout.addWidget(self.translated_edit)
 
         self.translate_panel.hide()
@@ -301,9 +306,29 @@ class ResultPopup(QWidget):
 
         card_layout.addWidget(utility)
 
-    def show_loading(self, anchor: QPoint | None = None, message: str = "Extracting text...") -> None:
+    def show_loading(
+        self,
+        anchor: QPoint | None = None,
+        message: str = "Extracting text...",
+        *,
+        clear_text: bool = False,
+    ) -> None:
         """Display the floating popup in a sleek loading state while OCR runs."""
         self._auto_close_timer.stop()
+        if clear_text:
+            self.text_edit.setPlainText("")
+            self._raw_ocr_text = ""
+            self._prev_lang_text = ""
+            self._prev_lang_tooltip = ""
+            self._prev_engine_text = ""
+            self._prev_stats_text = ""
+        elif self.text_edit.toPlainText().strip():
+            self._prev_lang_text = self.lang_pill.text()
+            self._prev_lang_tooltip = self.lang_pill.toolTip()
+            self._prev_engine_text = self.engine_pill.text()
+            self._prev_stats_text = self.stats_pill.text() if self.stats_pill.isVisible() else ""
+
+        self.progress.setRange(0, 0)
         self.progress.show()
         self.copied_badge.hide()
         self.note_label.hide()
@@ -335,6 +360,8 @@ class ResultPopup(QWidget):
         anchor: QPoint | None = None,
     ) -> None:
         """Populate the popup with an `OCRResult`."""
+        self.progress.setRange(0, 1)
+        self.progress.setValue(0)
         self.progress.hide()
         self.text_edit.setReadOnly(False)
         self.script_combo.setEnabled(True)
@@ -342,57 +369,75 @@ class ResultPopup(QWidget):
         self.ai_btn.setEnabled(True)
         self.copy_btn.setEnabled(True)
         has_text = bool(result.text.strip())
-        self.translate_btn.setEnabled(has_text)
-        self.unwrap_btn.setEnabled(has_text)
+        existing_text = self.text_edit.toPlainText().strip()
+        preserve_existing = not result.ok and not has_text and bool(existing_text)
+
         self.translate_panel.hide()
 
-        self._raw_ocr_text = result.text
-        self.unwrap_btn.blockSignals(True)
-        self.unwrap_btn.setChecked(False)
-        self.unwrap_btn.blockSignals(False)
-
-        self.text_edit.setPlainText(result.text)
-
-        if result.languages:
-            self.lang_pill.setText(f"🌐 {result.language_summary}")
-            tooltip_lines = [
-                f"• {lang.label}"
-                + (f" [{lang.script}]" if lang.script else "")
-                + f" — {lang.confidence:.0%}"
-                for lang in result.languages
-            ]
-            self.lang_pill.setToolTip("Detected languages:\n" + "\n".join(tooltip_lines))
-        elif has_text:
-            self.lang_pill.setText("🌐 Symbols / Numeric")
-            self.lang_pill.setToolTip("No natural language letters detected")
-        else:
-            self.lang_pill.setText("🌐 No text detected")
-            self.lang_pill.setToolTip("")
-
-        self.engine_pill.setText(result.engine_name)
-        stats_parts: list[str] = []
-        if result.confidence > 0:
-            stats_parts.append(f"{result.confidence:.0%}")
-        if result.elapsed_ms > 0:
-            stats_parts.append(f"{int(round(result.elapsed_ms))} ms")
-        if stats_parts:
-            self.stats_pill.setText(" • ".join(stats_parts))
-            self.stats_pill.show()
-        else:
-            self.stats_pill.hide()
-
-        if result.script_used in SCRIPT_PROFILES:
-            idx = self.script_combo.findData(result.script_used)
-            if idx >= 0:
-                self._updating_combo = True
-                self.script_combo.setCurrentIndex(idx)
-                self._updating_combo = False
-
-        if auto_copied and has_text:
-            self.copied_badge.setText("✓ Auto-copied")
-            self.copied_badge.show()
-        else:
+        if preserve_existing:
+            self.translate_btn.setEnabled(True)
+            self.unwrap_btn.setEnabled(True)
+            if self._prev_lang_text:
+                self.lang_pill.setText(self._prev_lang_text)
+                self.lang_pill.setToolTip(self._prev_lang_tooltip)
+            if self._prev_engine_text:
+                self.engine_pill.setText(self._prev_engine_text)
+            if self._prev_stats_text:
+                self.stats_pill.setText(self._prev_stats_text)
+                self.stats_pill.show()
+            else:
+                self.stats_pill.hide()
             self.copied_badge.hide()
+        else:
+            self.translate_btn.setEnabled(has_text)
+            self.unwrap_btn.setEnabled(has_text)
+            self._raw_ocr_text = result.text
+            self.unwrap_btn.blockSignals(True)
+            self.unwrap_btn.setChecked(False)
+            self.unwrap_btn.blockSignals(False)
+
+            self.text_edit.setPlainText(result.text)
+
+            if result.languages:
+                self.lang_pill.setText(f"🌐 {result.language_summary}")
+                tooltip_lines = [
+                    f"• {lang.label}"
+                    + (f" [{lang.script}]" if lang.script else "")
+                    + f" — {lang.confidence:.0%}"
+                    for lang in result.languages
+                ]
+                self.lang_pill.setToolTip("Detected languages:\n" + "\n".join(tooltip_lines))
+            elif has_text:
+                self.lang_pill.setText("🌐 Symbols / Numeric")
+                self.lang_pill.setToolTip("No natural language letters detected")
+            else:
+                self.lang_pill.setText("🌐 No text detected")
+                self.lang_pill.setToolTip("")
+
+            self.engine_pill.setText(result.engine_name)
+            stats_parts: list[str] = []
+            if result.confidence > 0:
+                stats_parts.append(f"{result.confidence:.0%}")
+            if result.elapsed_ms > 0:
+                stats_parts.append(f"{int(round(result.elapsed_ms))} ms")
+            if stats_parts:
+                self.stats_pill.setText(" • ".join(stats_parts))
+                self.stats_pill.show()
+            else:
+                self.stats_pill.hide()
+
+            if result.script_used in SCRIPT_PROFILES:
+                idx = self.script_combo.findData(result.script_used)
+                if idx >= 0:
+                    self._updating_combo = True
+                    self.script_combo.setCurrentIndex(idx)
+                    self._updating_combo = False
+
+            if auto_copied and has_text:
+                self.copied_badge.setText("✓ Auto-copied")
+                self.copied_badge.show()
+            else:
+                self.copied_badge.hide()
 
         if result.error:
             self.note_label.setText(f"⚠ {result.error}")
@@ -400,7 +445,7 @@ class ResultPopup(QWidget):
         elif result.fallback_note:
             self.note_label.setText(f"ℹ {result.fallback_note}")
             self.note_label.show()
-        elif not has_text:
+        elif not has_text and not preserve_existing:
             self.note_label.setText(
                 "No text found. Try another offline script below or click ✨ AI."
             )
@@ -447,6 +492,7 @@ class ResultPopup(QWidget):
         self.translate_btn.setEnabled(False)
         self.translate_btn.setText("Translating...")
         self.translate_meta_label.setText(f"🌐 Translating to {target_label}...")
+        self.translated_edit.setPlaceholderText("Translating...")
         self.translated_edit.setPlainText("")
         self.translated_edit.setReadOnly(True)
         self.copy_trans_btn.setEnabled(False)
@@ -465,10 +511,14 @@ class ResultPopup(QWidget):
             if result.elapsed_ms > 0:
                 meta_parts.append(f"{int(round(result.elapsed_ms))} ms")
             self.translate_meta_label.setText("  •  ".join(meta_parts))
+            self.translated_edit.setPlaceholderText("Translated text...")
             self.translated_edit.setPlainText(result.translated_text)
             self.copy_trans_btn.setEnabled(bool(result.translated_text.strip()))
         else:
             self.translate_meta_label.setText(f"⚠ {result.error}")
+            self.translated_edit.setPlaceholderText(
+                "Translation failed — try again or switch provider in Settings."
+            )
             self.translated_edit.setPlainText("")
             self.copy_trans_btn.setEnabled(False)
 

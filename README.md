@@ -112,7 +112,7 @@ Offline ML OCR works immediately with no keys or internet connection. To enable 
 
 | Provider | Environment Variable | Default Model | Notes |
 | --- | --- | --- | --- |
-| **Google Gemini** | `GEMINI_API_KEY` | `gemini-2.5-flash` | Sent via `x-goog-api-key` header (never in URLs) |
+| **Google Gemini** | `GEMINI_API_KEY` | `gemini-3.8-flash` | Sent via `x-goog-api-key` header (never in URLs) |
 | **OpenAI / Compatible** | `OPENAI_API_KEY` | `gpt-4o-mini` | Customizable Base URL (works with OpenRouter, Groq, LM Studio, vLLM) |
 | **Ollama (Local)** | *(none)* | `qwen2.5vl:7b` | 100% local Vision LLM at `http://localhost:11434` |
 

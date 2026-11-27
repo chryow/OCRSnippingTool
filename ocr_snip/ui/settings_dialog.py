@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ocr_snip.capture.hotkey import format_hotkey_display
-from ocr_snip.config import AppConfig
+from ocr_snip.config import DEFAULT_GEMINI_MODEL, RECOMMENDED_GEMINI_MODELS, AppConfig
 from ocr_snip.logging_utils import get_logs_dir
 from ocr_snip.ocr.local_rapidocr import (
     SCRIPT_PROFILES,
@@ -389,9 +389,14 @@ class SettingsDialog(QDialog):
         )
         self.gemini_key_edit.textChanged.connect(self._update_provider_fields)
         g_form.addRow("API Key:", gemini_key_row)
-        self.gemini_model_edit = QLineEdit()
-        self.gemini_model_edit.setPlaceholderText("gemini-2.5-flash")
-        g_form.addRow("Model:", self.gemini_model_edit)
+        self.gemini_model_combo = QComboBox()
+        self.gemini_model_combo.setEditable(True)
+        for model_id in RECOMMENDED_GEMINI_MODELS:
+            self.gemini_model_combo.addItem(model_id)
+        self.gemini_model_edit = self.gemini_model_combo.lineEdit()
+        assert self.gemini_model_edit is not None
+        self.gemini_model_edit.setPlaceholderText(DEFAULT_GEMINI_MODEL)
+        g_form.addRow("Model:", self.gemini_model_combo)
         layout.addWidget(self.gemini_group)
 
         # OpenAI group
@@ -516,7 +521,7 @@ class SettingsDialog(QDialog):
             auto_translate=self.auto_translate_cb.isChecked(),
             ai_provider=str(self.provider_combo.currentData() or "gemini"),
             gemini_api_key=self.gemini_key_edit.text().strip(),
-            gemini_model=self.gemini_model_edit.text().strip() or "gemini-2.5-flash",
+            gemini_model=self.gemini_model_edit.text().strip() or DEFAULT_GEMINI_MODEL,
             openai_api_key=self.openai_key_edit.text().strip(),
             openai_base_url=self.openai_url_edit.text().strip() or "https://api.openai.com/v1",
             openai_model=self.openai_model_edit.text().strip() or "gpt-4o-mini",

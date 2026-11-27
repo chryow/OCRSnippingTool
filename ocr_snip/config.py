@@ -37,6 +37,26 @@ def get_models_dir() -> Path:
     return models_dir
 
 
+DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
+
+RECOMMENDED_GEMINI_MODELS: tuple[str, ...] = (
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+    "gemini-3.1-flash-lite",
+)
+
+DEPRECATED_GEMINI_MODELS: frozenset[str] = frozenset(
+    {
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-exp",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+    }
+)
+
+
 @dataclass
 class AppConfig:
     """User-configurable settings for OCRSnippingTool."""
@@ -70,7 +90,7 @@ class AppConfig:
 
     # API keys / endpoints (also reads GEMINI_API_KEY / OPENAI_API_KEY env vars as fallback)
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = DEFAULT_GEMINI_MODEL
 
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
@@ -128,4 +148,7 @@ class AppConfig:
             return cls()
         valid_fields = set(cls.__dataclass_fields__.keys())
         filtered = {k: v for k, v in raw.items() if k in valid_fields}
+        gemini_model = str(filtered.get("gemini_model", "")).strip().lower()
+        if gemini_model in DEPRECATED_GEMINI_MODELS:
+            filtered["gemini_model"] = DEFAULT_GEMINI_MODEL
         return cls(**filtered)

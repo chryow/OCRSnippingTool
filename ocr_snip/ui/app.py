@@ -416,7 +416,8 @@ class OCRSnippingApp(QObject):
             return
 
         if self.config.show_popup or force_engine is not None or script_override is not None:
-            self.popup.show_loading(anchor=anchor, message=loading_msg)
+            is_new_capture = force_engine is None and script_override is None
+            self.popup.show_loading(anchor=anchor, message=loading_msg, clear_text=is_new_capture)
 
         worker = OCRWorker(
             self.manager,

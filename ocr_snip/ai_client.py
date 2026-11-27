@@ -11,16 +11,22 @@ Security & performance features:
 
 from __future__ import annotations
 
+import logging
+import re
 import threading
 from typing import Any
 
 import httpx
 
-from ocr_snip.config import AppConfig
+from ocr_snip.config import DEFAULT_GEMINI_MODEL, DEPRECATED_GEMINI_MODELS, AppConfig
 from ocr_snip.security import redact_secrets, validate_base_url, validate_model_name
+
+logger = logging.getLogger("ocr_snip.ai_client")
 
 _CLIENT_LOCK = threading.Lock()
 _SHARED_CLIENT: httpx.Client | None = None
+_GEMINI_MODEL_HINT_RE = re.compile(r"\bmodels/(gemini-[A-Za-z0-9][A-Za-z0-9._-]{1,60})\b")
+_GEMINI_VERSION_RE = re.compile(r"gemini-(\d+)(?:\.(\d+))?")
 
 
 def get_http_client() -> httpx.Client:
@@ -105,6 +111,74 @@ def call_ai_provider(
     raise ValueError(f"Unsupported AI provider: {provider}")
 
 
+def _gemini_model_sort_key(model_name: str) -> tuple[int, int, int, int, str]:
+    """Rank Gemini models: prefer stable non-preview Flash models with highest version."""
+    lower = model_name.lower()
+    is_flash = 1 if "flash" in lower else 0
+    is_stable = 0 if any(tag in lower for tag in ("exp", "preview", "thinking", "audio", "tts", "image")) else 1
+    is_non_lite = 0 if "lite" in lower else 1
+    ver_match = _GEMINI_VERSION_RE.search(lower)
+    major = int(ver_match.group(1)) if ver_match else 0
+    minor = int(ver_match.group(2)) if ver_match and ver_match.group(2) else 0
+    return (is_flash, is_stable, major, minor, f"{is_non_lite}:{lower}")
+
+
+def _discover_gemini_fallback_model(
+    client: httpx.Client,
+    api_key: str,
+    *,
+    failed_model: str,
+    error_detail: str,
+    timeout: float,
+) -> str | None:
+    """Resolve an available replacement Gemini model when a configured model returns HTTP 404."""
+    failed_lower = failed_model.lower()
+
+    # 1. Check if Google's 404 message explicitly recommends a replacement model
+    for candidate in _GEMINI_MODEL_HINT_RE.findall(error_detail):
+        cand_lower = candidate.lower()
+        if cand_lower != failed_lower and cand_lower not in DEPRECATED_GEMINI_MODELS:
+            try:
+                return validate_model_name(candidate)
+            except ValueError:
+                continue
+
+    # 2. Query the Gemini models catalog to find the newest available Flash model
+    try:
+        list_resp = client.get(
+            "https://generativelanguage.googleapis.com/v1beta/models",
+            headers={"x-goog-api-key": api_key},
+            timeout=min(timeout, 10.0),
+        )
+        if list_resp.status_code != 200:
+            return None
+        payload = list_resp.json()
+        models = payload.get("models", []) if isinstance(payload, dict) else []
+        candidates: list[str] = []
+        for entry in models:
+            if not isinstance(entry, dict):
+                continue
+            methods = entry.get("supportedGenerationMethods", [])
+            if not isinstance(methods, list) or "generateContent" not in methods:
+                continue
+            raw_name = str(entry.get("name", ""))
+            if not raw_name.startswith("models/gemini-"):
+                continue
+            short_name = raw_name[len("models/") :]
+            if short_name.lower() == failed_lower or short_name.lower() in DEPRECATED_GEMINI_MODELS:
+                continue
+            try:
+                candidates.append(validate_model_name(short_name))
+            except ValueError:
+                continue
+        if candidates:
+            candidates.sort(key=_gemini_model_sort_key, reverse=True)
+            return candidates[0]
+    except Exception:
+        return None
+    return None
+
+
 def _call_gemini(
     config: AppConfig,
     prompt: str,
@@ -120,7 +194,7 @@ def _call_gemini(
         raise RuntimeError(
             "Gemini API key not set. Add it in Settings or set GEMINI_API_KEY."
         )
-    model = validate_model_name(config.gemini_model.strip() or "gemini-2.5-flash")
+    model = validate_model_name(config.gemini_model.strip() or DEFAULT_GEMINI_MODEL)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     headers = {
         "x-goog-api-key": api_key,
@@ -141,6 +215,32 @@ def _call_gemini(
 
     client = get_http_client()
     resp = client.post(url, headers=headers, json=body, timeout=timeout)
+
+    if resp.status_code == 404:
+        detail = extract_http_error_detail(resp)
+        fallback_model = _discover_gemini_fallback_model(
+            client,
+            api_key,
+            failed_model=model,
+            error_detail=detail,
+            timeout=timeout,
+        )
+        if fallback_model:
+            logger.info(
+                "Gemini model '%s' returned 404; retrying automatically with '%s'",
+                model,
+                fallback_model,
+            )
+            fallback_url = (
+                f"https://generativelanguage.googleapis.com/v1beta/models/"
+                f"{fallback_model}:generateContent"
+            )
+            retry_resp = client.post(fallback_url, headers=headers, json=body, timeout=timeout)
+            if retry_resp.status_code == 200:
+                resp = retry_resp
+                model = fallback_model
+                config.gemini_model = fallback_model
+
     resp.raise_for_status()
     data = resp.json()
 
