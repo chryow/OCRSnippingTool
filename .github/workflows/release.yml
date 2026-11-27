@@ -180,7 +180,9 @@ jobs:
           - **Win+Shift+S style snipping overlay** with multi-monitor HiDPI support
           - **Hybrid AI/ML OCR**: Offline RapidOCR (ONNX PP-OCRv6 universal + PP-OCRv5 100+ language scripts) + optional **Gemini / OpenAI / Ollama** Vision AI
           - **Automatic multilingual language detection** (70+ languages, single & mixed scripts)
+          - **Built-in 1-Click Translation** (25+ target languages right inside the floating popup — works out-of-the-box with zero API keys, or via your configured AI provider)
           - **Instant clipboard auto-copy + floating preview/edit popup**
+          - **Single-instance guard & diagnostic logging**: re-launching the app triggers a new snip instead of duplicate tray icons, and rotating crash/diagnostic logs are accessible via **Tray → Open Logs Folder**
           - Models cache persistently in your user data folder on first run (`%APPDATA%\OCRSnippingTool\models` on Windows, `~/Library/Application Support/OCRSnippingTool/models` on macOS, `~/.config/OCRSnippingTool/models` on Linux).
           EOF
 

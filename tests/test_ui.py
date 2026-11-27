@@ -139,3 +139,69 @@ def test_settings_dialog_live_ai_status(qtbot, monkeypatch) -> None:
     assert "Ready" in dialog.ai_status_label.text()
 
 
+def test_result_popup_translation_flow_and_copy(qtbot) -> None:
+    from ocr_snip.translate import TranslationResult
+
+    popup = ResultPopup()
+    qtbot.addWidget(popup)
+    popup.show()
+
+    popup.text_edit.setPlainText("こんにちは世界")
+    popup.set_target_language("en")
+
+    with qtbot.waitSignal(popup.translate_requested, timeout=1000) as blocker:
+        popup.translate_btn.click()
+    assert blocker.args == ["こんにちは世界", "en"]
+
+    popup.show_translation_result(
+        TranslationResult(
+            translated_text="Hello world",
+            target_language="English",
+            provider_name="Free Translate",
+            elapsed_ms=85.0,
+        )
+    )
+    assert popup.translate_panel.isVisible()
+    assert popup.translated_edit.toPlainText() == "Hello world"
+
+    popup.copy_translated_text()
+    assert QGuiApplication.clipboard().text() == "Hello world"
+
+
+def test_app_controller_async_translation(qtbot) -> None:
+    from PyQt6.QtWidgets import QApplication
+
+    from ocr_snip.translate import TranslationResult
+    from ocr_snip.ui.app import OCRSnippingApp
+
+    qt_app = QApplication.instance()
+    assert isinstance(qt_app, QApplication)
+
+    cfg = AppConfig(engine_mode="local", translate_target_lang="en")
+    controller = OCRSnippingApp(qt_app, config=cfg)
+
+    def fake_translate(text: str, target_lang: str | None = None, **kwargs):
+        return TranslationResult(
+            translated_text="Hello world",
+            target_language="English",
+            provider_name="Stub Translator",
+            elapsed_ms=12.0,
+        )
+
+    controller.translator.translate = fake_translate  # type: ignore[method-assign]
+
+    try:
+        controller.popup.text_edit.setPlainText("こんにちは世界")
+        controller.translate_text("こんにちは世界", "en")
+        qtbot.waitUntil(
+            lambda: controller.popup.translated_edit.toPlainText() == "Hello world",
+            timeout=3000,
+        )
+        assert "Stub Translator" in controller.popup.translate_meta_label.text()
+    finally:
+        controller.hotkey.stop()
+        controller.tray.hide()
+        controller.popup.hide()
+
+
+

@@ -35,6 +35,12 @@ def _run_cli_image(args: argparse.Namespace) -> int:
         script_override=args.script,
     )
 
+    translation = None
+    if args.translate and result.ok and result.text.strip():
+        from ocr_snip.translate import Translator
+
+        translation = Translator(config).translate(result.text, target_lang=args.translate)
+
     if args.json:
         payload = {
             "ok": result.ok,
@@ -54,16 +60,35 @@ def _run_cli_image(args: argparse.Namespace) -> int:
             "fallback_note": result.fallback_note,
             "error": result.error,
         }
+        if translation is not None:
+            payload["translation"] = {
+                "ok": translation.ok,
+                "text": translation.translated_text,
+                "target_language": translation.target_language,
+                "provider": translation.provider_name,
+                "error": translation.error,
+            }
         print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
         if not result.ok:
             print(f"Error: {result.error}", file=sys.stderr)
             return 1
-        print(f"[Language: {result.language_summary} | Engine: {result.engine_name} | "
-              f"Confidence: {result.confidence:.0%} | {result.elapsed_ms:.0f} ms]")
+        print(
+            f"[Language: {result.language_summary} | Engine: {result.engine_name} | "
+            f"Confidence: {result.confidence:.0%} | {result.elapsed_ms:.0f} ms]"
+        )
         if result.fallback_note:
             print(f"[Note: {result.fallback_note}]")
         print(result.text)
+        if translation is not None:
+            if translation.ok:
+                print(
+                    f"\n[Translation → {translation.target_language} | "
+                    f"{translation.provider_name}]"
+                )
+                print(translation.translated_text)
+            else:
+                print(f"\n[Translation error: {translation.error}]", file=sys.stderr)
 
     return 0 if result.ok else 1
 
@@ -95,7 +120,13 @@ def main(argv: list[str] | None = None) -> int:
         "--script",
         type=str,
         default=None,
-        help="Override local OCR script profile (e.g. auto, latin, korean, cyrillic, arabic, devanagari, thai).",
+        help="Override local OCR script profile (e.g. auto, latin, korean, eslav, cyrillic, arabic, devanagari, thai).",
+    )
+    parser.add_argument(
+        "--translate",
+        type=str,
+        default=None,
+        help="Translate extracted text to target language code (e.g. en, id, es, ja).",
     )
     parser.add_argument(
         "--json",

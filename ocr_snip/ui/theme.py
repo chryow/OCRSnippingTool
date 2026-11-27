@@ -139,6 +139,23 @@ QPushButton#AIButton:hover {
     background-color: rgba(139, 92, 246, 0.30);
 }
 
+QPushButton#TranslateButton {
+    background-color: rgba(14, 165, 233, 0.16);
+    border: 1px solid rgba(56, 189, 248, 0.42);
+    color: #bae6fd;
+    font-weight: 600;
+}
+
+QPushButton#TranslateButton:hover {
+    background-color: rgba(14, 165, 233, 0.28);
+}
+
+QFrame#TranslatePanel {
+    background-color: #111522;
+    border: 1px solid #26314a;
+    border-radius: 10px;
+}
+
 QPushButton#IconButton {
     background-color: transparent;
     border: 1px solid transparent;
