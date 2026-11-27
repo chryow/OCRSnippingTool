@@ -33,7 +33,13 @@ def _run_cli_image(args: argparse.Namespace) -> int:
         image,
         force_engine=args.mode,
         script_override=args.script,
+        ai_output_format=args.ai_format,
     )
+
+    if args.unwrap and result.ok and result.text.strip():
+        from ocr_snip.formatting import unwrap_paragraphs
+
+        result.text = unwrap_paragraphs(result.text)
 
     translation = None
     if args.translate and result.ok and result.text.strip():
@@ -121,6 +127,17 @@ def main(argv: list[str] | None = None) -> int:
         type=str,
         default=None,
         help="Override local OCR script profile (e.g. auto, latin, korean, eslav, cyrillic, arabic, devanagari, thai).",
+    )
+    parser.add_argument(
+        "--ai-format",
+        choices=["text", "markdown", "latex"],
+        default=None,
+        help="Vision AI output format (text, markdown tables/code, or math latex).",
+    )
+    parser.add_argument(
+        "--unwrap",
+        action="store_true",
+        help="Unwrap hard line breaks into flowing paragraphs (ideal for PDFs/articles).",
     )
     parser.add_argument(
         "--translate",

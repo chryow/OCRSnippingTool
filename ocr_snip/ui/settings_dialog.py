@@ -1,10 +1,10 @@
-"""Modern Settings dialog for OCR engine, multilingual script, hotkey, and Vision AI."""
+"""Modern Settings dialog for OCR engine, Language Packs, translation, hotkey, and Vision AI."""
 
 from __future__ import annotations
 
 from dataclasses import replace
 
-from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtCore import Qt, QThread, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -12,11 +12,13 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDoubleSpinBox,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTabWidget,
     QVBoxLayout,
@@ -26,20 +28,52 @@ from PyQt6.QtWidgets import (
 from ocr_snip.capture.hotkey import format_hotkey_display
 from ocr_snip.config import AppConfig
 from ocr_snip.logging_utils import get_logs_dir
-from ocr_snip.ocr.local_rapidocr import SCRIPT_PROFILES
+from ocr_snip.ocr.local_rapidocr import (
+    SCRIPT_PROFILES,
+    LocalRapidOCREngine,
+    is_script_installed,
+)
+from ocr_snip.ocr.vision_ai import AI_OUTPUT_FORMATS
 from ocr_snip.translate import TARGET_LANGUAGES
 from ocr_snip.ui.theme import DARK_STYLESHEET, create_app_icon
+
+
+class PackDownloadWorker(QThread):
+    """Downloads an offline RapidOCR ONNX language pack without blocking the UI."""
+
+    finished_download = pyqtSignal(str, bool, str)  # (script_key, ok, message)
+
+    def __init__(self, engine: LocalRapidOCREngine, script_key: str, parent=None) -> None:
+        super().__init__(parent)
+        self._engine = engine
+        self._script_key = script_key
+
+    def run(self) -> None:
+        try:
+            self._engine.download_script_pack(self._script_key)
+            self.finished_download.emit(self._script_key, True, "Installed")
+        except Exception as exc:
+            self.finished_download.emit(self._script_key, False, str(exc))
 
 
 class SettingsDialog(QDialog):
     """Configuration dialog for OCRSnippingTool."""
 
-    def __init__(self, config: AppConfig, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        config: AppConfig,
+        local_engine: LocalRapidOCREngine | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self._config = replace(config)
+        self._local_engine = local_engine or LocalRapidOCREngine()
+        self._pack_worker: PackDownloadWorker | None = None
+        self._pack_rows: dict[str, tuple[QLabel, QPushButton, QPushButton]] = {}
+
         self.setWindowTitle("OCRSnippingTool Settings")
         self.setWindowIcon(create_app_icon(64))
-        self.setMinimumWidth(520)
+        self.setMinimumWidth(560)
         self.setStyleSheet(DARK_STYLESHEET)
         self._build_ui()
         self._load_from_config()
@@ -54,6 +88,7 @@ class SettingsDialog(QDialog):
 
         self._build_general_tab()
         self._build_ocr_tab()
+        self._build_language_packs_tab()
         self._build_vision_ai_tab()
 
         # Buttons row
@@ -159,6 +194,11 @@ class SettingsDialog(QDialog):
             self.script_combo.addItem(profile.label, key)
         form.addRow("Default offline script:", self.script_combo)
 
+        self.auto_probe_cb = QCheckBox(
+            "Smart offline auto-probe: automatically check installed Language Packs on low confidence"
+        )
+        form.addRow(self.auto_probe_cb)
+
         self.threshold_spin = QDoubleSpinBox()
         self.threshold_spin.setRange(0.10, 0.99)
         self.threshold_spin.setSingleStep(0.05)
@@ -169,14 +209,10 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Hybrid AI fallback threshold:", self.threshold_spin)
 
-        tip = QLabel(
-            "Tip: PP-OCRv6 'Auto' handles English, Latin, Chinese, Japanese, and Greek offline "
-            "out-of-the-box. Switch scripts anytime right in the floating popup, or configure "
-            "Vision AI for automatic recognition of every world language & handwriting."
-        )
-        tip.setObjectName("MutedLabel")
-        tip.setWordWrap(True)
-        form.addRow(tip)
+        self.ai_format_combo = QComboBox()
+        for code, label in AI_OUTPUT_FORMATS:
+            self.ai_format_combo.addItem(label, code)
+        form.addRow("Default Vision AI format:", self.ai_format_combo)
 
         layout.addWidget(mode_group)
 
@@ -202,6 +238,126 @@ class SettingsDialog(QDialog):
         layout.addWidget(trans_group)
         layout.addStretch()
         self.tabs.addTab(tab, "OCR & Translate")
+
+    def _build_language_packs_tab(self) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(10)
+
+        intro = QLabel(
+            "Download extra offline ONNX language packs below. Once installed, "
+            "'Auto' mode automatically probes them whenever you snip Korean, Russian, "
+            "Arabic, Hindi, Thai, or other scripts — 100% offline."
+        )
+        intro.setObjectName("MutedLabel")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        self.pack_status_banner = QLabel("")
+        self.pack_status_banner.setObjectName("MutedLabel")
+        layout.addWidget(self.pack_status_banner)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_body = QWidget()
+        scroll_layout = QVBoxLayout(scroll_body)
+        scroll_layout.setContentsMargins(0, 0, 6, 0)
+        scroll_layout.setSpacing(6)
+
+        for key, profile in SCRIPT_PROFILES.items():
+            row_frame = QFrame()
+            row_frame.setStyleSheet(
+                "QFrame { background-color: #0e1018; border: 1px solid #252b3d; "
+                "border-radius: 8px; padding: 4px; }"
+            )
+            row_layout = QHBoxLayout(row_frame)
+            row_layout.setContentsMargins(10, 6, 10, 6)
+            row_layout.setSpacing(8)
+
+            info_col = QVBoxLayout()
+            info_col.setSpacing(2)
+            name_lbl = QLabel(profile.label)
+            name_lbl.setStyleSheet("border: none; font-weight: 600;")
+            desc_lbl = QLabel(profile.description)
+            desc_lbl.setObjectName("MutedLabel")
+            desc_lbl.setStyleSheet("border: none; color: #8892b0; font-size: 11px;")
+            info_col.addWidget(name_lbl)
+            info_col.addWidget(desc_lbl)
+            row_layout.addLayout(info_col, stretch=1)
+
+            status_lbl = QLabel("")
+            status_lbl.setStyleSheet("border: none;")
+            row_layout.addWidget(status_lbl)
+
+            dl_btn = QPushButton("Download")
+            dl_btn.clicked.connect(lambda _checked=False, k=key: self._download_pack(k))
+            row_layout.addWidget(dl_btn)
+
+            rm_btn = QPushButton("Remove")
+            rm_btn.clicked.connect(lambda _checked=False, k=key: self._remove_pack(k))
+            if key == "auto":
+                rm_btn.setVisible(False)
+            row_layout.addWidget(rm_btn)
+
+            self._pack_rows[key] = (status_lbl, dl_btn, rm_btn)
+            scroll_layout.addWidget(row_frame)
+
+        scroll_layout.addStretch()
+        scroll.setWidget(scroll_body)
+        layout.addWidget(scroll, stretch=1)
+
+        self.tabs.addTab(tab, "Language Packs")
+        self.refresh_language_packs()
+
+    def refresh_language_packs(self) -> None:
+        models_dir = self._local_engine.models_dir
+        installed_count = 0
+        for key, (status_lbl, dl_btn, rm_btn) in self._pack_rows.items():
+            installed = is_script_installed(key, models_dir=models_dir)
+            if installed:
+                installed_count += 1
+                status_lbl.setText("✓ Installed")
+                status_lbl.setStyleSheet(
+                    "border: none; color: #6ee7b7; font-size: 11px; font-weight: 600;"
+                )
+                dl_btn.setText("Installed")
+                dl_btn.setEnabled(False)
+                rm_btn.setEnabled(key != "auto")
+            else:
+                status_lbl.setText("Available")
+                status_lbl.setStyleSheet("border: none; color: #8892b0; font-size: 11px;")
+                dl_btn.setText("Download")
+                dl_btn.setEnabled(self._pack_worker is None)
+                rm_btn.setEnabled(False)
+        self.pack_status_banner.setText(
+            f"{installed_count} of {len(SCRIPT_PROFILES)} offline packs cached in {models_dir}"
+        )
+
+    def _download_pack(self, script_key: str) -> None:
+        if self._pack_worker is not None and self._pack_worker.isRunning():
+            return
+        status_lbl, dl_btn, _rm_btn = self._pack_rows[script_key]
+        status_lbl.setText("Downloading...")
+        dl_btn.setText("Downloading...")
+        for _s, b_dl, _b_rm in self._pack_rows.values():
+            b_dl.setEnabled(False)
+
+        worker = PackDownloadWorker(self._local_engine, script_key, parent=self)
+        worker.finished_download.connect(self._on_pack_download_finished)
+        worker.finished.connect(worker.deleteLater)
+        self._pack_worker = worker
+        worker.start()
+
+    def _on_pack_download_finished(self, script_key: str, ok: bool, message: str) -> None:
+        self._pack_worker = None
+        self.refresh_language_packs()
+        if not ok:
+            self.pack_status_banner.setText(f"⚠ Failed to download {script_key}: {message}")
+
+    def _remove_pack(self, script_key: str) -> None:
+        self._local_engine.remove_script_pack(script_key)
+        self.refresh_language_packs()
 
     def _build_vision_ai_tab(self) -> None:
         tab = QWidget()
@@ -281,7 +437,9 @@ class SettingsDialog(QDialog):
 
         self._select_combo_data(self.mode_combo, c.engine_mode)
         self._select_combo_data(self.script_combo, c.local_script)
+        self.auto_probe_cb.setChecked(c.auto_probe_installed_scripts)
         self.threshold_spin.setValue(c.hybrid_confidence_threshold)
+        self._select_combo_data(self.ai_format_combo, c.ai_output_format)
 
         self._select_combo_data(self.translate_lang_combo, c.translate_target_lang)
         self._select_combo_data(self.translate_provider_combo, c.translation_provider)
@@ -327,7 +485,9 @@ class SettingsDialog(QDialog):
             popup_auto_close_seconds=self.auto_close_spin.value(),
             engine_mode=str(self.mode_combo.currentData() or "hybrid"),
             local_script=str(self.script_combo.currentData() or "auto"),
+            auto_probe_installed_scripts=self.auto_probe_cb.isChecked(),
             hybrid_confidence_threshold=round(self.threshold_spin.value(), 2),
+            ai_output_format=str(self.ai_format_combo.currentData() or "text"),
             translate_target_lang=str(self.translate_lang_combo.currentData() or "en"),
             translation_provider=str(self.translate_provider_combo.currentData() or "auto"),
             auto_translate=self.auto_translate_cb.isChecked(),

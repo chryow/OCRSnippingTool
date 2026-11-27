@@ -63,8 +63,10 @@ def test_result_popup_signals(qtbot) -> None:
     popup = ResultPopup()
     qtbot.addWidget(popup)
 
-    with qtbot.waitSignal(popup.enhance_ai_requested, timeout=1000):
+    popup.set_ai_output_format("latex")
+    with qtbot.waitSignal(popup.enhance_ai_requested, timeout=1000) as ai_blocker:
         popup.ai_btn.click()
+    assert ai_blocker.args == ["latex"]
 
     with qtbot.waitSignal(popup.rescan_script_requested, timeout=1000) as blocker:
         idx = popup.script_combo.findData("korean")
@@ -88,9 +90,10 @@ def test_settings_dialog_updates_config(qtbot) -> None:
     assert updated.engine_mode == "local"
 
 
-def test_app_controller_end_to_end_capture_to_clipboard_and_popup(qtbot) -> None:
+def test_app_controller_end_to_end_capture_to_clipboard_and_popup(qtbot, tmp_path) -> None:
     from PyQt6.QtWidgets import QApplication
 
+    from ocr_snip.history import HistoryStore
     from ocr_snip.ocr.base import OCREngine
     from ocr_snip.ui.app import OCRSnippingApp
 
@@ -111,7 +114,8 @@ def test_app_controller_end_to_end_capture_to_clipboard_and_popup(qtbot) -> None
     assert isinstance(qt_app, QApplication)
 
     cfg = AppConfig(engine_mode="local", auto_copy=True, show_popup=True)
-    controller = OCRSnippingApp(qt_app, config=cfg)
+    store = HistoryStore(path=tmp_path / "history.json")
+    controller = OCRSnippingApp(qt_app, config=cfg, history_store=store)
     controller.manager._local = FastStubLocal()
 
     try:
@@ -122,29 +126,52 @@ def test_app_controller_end_to_end_capture_to_clipboard_and_popup(qtbot) -> None
         assert "Japanese" in controller.popup.lang_pill.text()
         assert controller.popup.copied_badge.isVisible()
         assert controller.tray.contextMenu() is controller._tray_menu
+        assert len(store.entries) == 1
+        assert store.entries[0].text == "こんにちは世界"
     finally:
         controller.hotkey.stop()
         controller.tray.hide()
         controller.popup.hide()
 
 
-def test_settings_dialog_live_ai_status(qtbot, monkeypatch) -> None:
+def test_settings_dialog_live_ai_status(qtbot, monkeypatch, tmp_path) -> None:
+    from ocr_snip.ocr.local_rapidocr import SCRIPT_PROFILES, LocalRapidOCREngine
+
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    (tmp_path / SCRIPT_PROFILES["korean"].model_filename).write_bytes(b"fake")
     cfg = AppConfig(ai_provider="gemini", gemini_api_key="")
-    dialog = SettingsDialog(cfg)
+    dialog = SettingsDialog(cfg, local_engine=LocalRapidOCREngine(models_dir=tmp_path))
     qtbot.addWidget(dialog)
 
     assert "Not configured" in dialog.ai_status_label.text()
     dialog.gemini_key_edit.setText("live-key-123")
     assert "Ready" in dialog.ai_status_label.text()
 
+    # Language Packs tab reflects installed Korean pack
+    status_lbl, _dl, rm_btn = dialog._pack_rows["korean"]
+    assert "Installed" in status_lbl.text()
+    assert rm_btn.isEnabled()
 
-def test_result_popup_translation_flow_and_copy(qtbot) -> None:
+
+def test_result_popup_unwrap_and_translation_flow(qtbot) -> None:
     from ocr_snip.translate import TranslationResult
 
     popup = ResultPopup()
     qtbot.addWidget(popup)
     popup.show()
+
+    popup.show_result(
+        OCRResult(
+            text="Line one\nline two",
+            engine_name="Local ML",
+            confidence=0.95,
+            languages=[DetectedLanguage("en", "English")],
+        )
+    )
+    popup.unwrap_btn.setChecked(True)
+    assert popup.text_edit.toPlainText() == "Line one line two"
+    popup.unwrap_btn.setChecked(False)
+    assert popup.text_edit.toPlainText() == "Line one\nline two"
 
     popup.text_edit.setPlainText("こんにちは世界")
     popup.set_target_language("en")
@@ -168,9 +195,36 @@ def test_result_popup_translation_flow_and_copy(qtbot) -> None:
     assert QGuiApplication.clipboard().text() == "Hello world"
 
 
-def test_app_controller_async_translation(qtbot) -> None:
+def test_history_dialog_search_pin_and_copy(qtbot, tmp_path) -> None:
+    from ocr_snip.history import HistoryStore
+    from ocr_snip.ui.history_dialog import HistoryDialog
+
+    store = HistoryStore(path=tmp_path / "history.json")
+    e1 = store.add(text="Alpha snippet", language="English", engine="Local ML", confidence=0.98)
+    e2 = store.add(text="東京タワー", language="Japanese", engine="Local ML", confidence=0.99)
+    assert e1 and e2
+    store.update_translation(e2.id, "Tokyo Tower", "English")
+
+    dlg = HistoryDialog(store)
+    qtbot.addWidget(dlg)
+    dlg.show()
+
+    assert dlg.list_widget.count() == 2
+    dlg.search_edit.setText("Tokyo")
+    assert dlg.list_widget.count() == 1
+    assert dlg.detail_trans.toPlainText() == "Tokyo Tower"
+
+    dlg.copy_trans_btn.click()
+    assert QGuiApplication.clipboard().text() == "Tokyo Tower"
+
+    dlg.pin_btn.click()
+    assert store.entries[0].pinned is True
+
+
+def test_app_controller_async_translation(qtbot, tmp_path) -> None:
     from PyQt6.QtWidgets import QApplication
 
+    from ocr_snip.history import HistoryStore
     from ocr_snip.translate import TranslationResult
     from ocr_snip.ui.app import OCRSnippingApp
 
@@ -178,7 +232,8 @@ def test_app_controller_async_translation(qtbot) -> None:
     assert isinstance(qt_app, QApplication)
 
     cfg = AppConfig(engine_mode="local", translate_target_lang="en")
-    controller = OCRSnippingApp(qt_app, config=cfg)
+    store = HistoryStore(path=tmp_path / "history.json")
+    controller = OCRSnippingApp(qt_app, config=cfg, history_store=store)
 
     def fake_translate(text: str, target_lang: str | None = None, **kwargs):
         return TranslationResult(

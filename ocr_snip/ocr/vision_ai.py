@@ -20,6 +20,12 @@ from ocr_snip.config import AppConfig
 from ocr_snip.language import detect_languages, language_name
 from ocr_snip.ocr.base import DetectedLanguage, OCREngine, OCRResult
 
+AI_OUTPUT_FORMATS: list[tuple[str, str]] = [
+    ("text", "Plain Text"),
+    ("markdown", "Markdown / Tables"),
+    ("latex", "Math / LaTeX"),
+]
+
 VISION_OCR_PROMPT = """You are a precision multilingual OCR engine.
 Extract ALL visible text from this image accurately and verbatim.
 Rules:
@@ -30,6 +36,26 @@ Rules:
 {"text": "<extracted text>", "languages": [{"code": "<iso-639-1 code>", "name": "<English language name>"}]}
 If there is no readable text in the image, return:
 {"text": "", "languages": []}"""
+
+
+def build_vision_prompt(output_format: str = "text") -> str:
+    """Build the Vision AI OCR prompt tailored to the requested output format."""
+    fmt = (output_format or "text").strip().lower()
+    if fmt == "markdown":
+        return (
+            VISION_OCR_PROMPT
+            + "\n5. Format structured layouts cleanly in GitHub-Flavored Markdown: "
+            "convert any tables into Markdown tables (`| col |`), preserve headings (`#`), "
+            "bullet/numbered lists, and wrap code blocks in fenced ``` blocks."
+        )
+    if fmt == "latex":
+        return (
+            VISION_OCR_PROMPT
+            + "\n5. Convert all mathematical formulas, fractions, integrals, matrices, "
+            "subscripts, superscripts, and Greek symbols into clean LaTeX (`$...$` inline "
+            "or `$$...$$` for display equations), preserving surrounding prose verbatim."
+        )
+    return VISION_OCR_PROMPT
 
 
 def _encode_image_png_base64(image: Image.Image, max_side: int = 2048) -> str:
@@ -106,18 +132,22 @@ class VisionAIEngine(OCREngine):
         self.config = config
         self.timeout = timeout
 
-    def recognize(self, image: Image.Image, **kwargs: Any) -> OCRResult:
+    def recognize(
+        self, image: Image.Image, *, output_format: str | None = None, **kwargs: Any
+    ) -> OCRResult:
         provider = self.config.ai_provider.strip().lower()
+        fmt = (output_format or self.config.ai_output_format or "text").strip().lower()
+        prompt = build_vision_prompt(fmt)
         start = time.perf_counter()
 
         try:
             b64_png = _encode_image_png_base64(image)
             if provider == "gemini":
-                raw_text, label = self._call_gemini(b64_png)
+                raw_text, label = self._call_gemini(b64_png, prompt)
             elif provider == "openai":
-                raw_text, label = self._call_openai(b64_png)
+                raw_text, label = self._call_openai(b64_png, prompt)
             elif provider == "ollama":
-                raw_text, label = self._call_ollama(b64_png)
+                raw_text, label = self._call_ollama(b64_png, prompt)
             else:
                 raise ValueError(f"Unsupported Vision AI provider: {provider}")
         except httpx.HTTPStatusError as exc:
@@ -142,16 +172,17 @@ class VisionAIEngine(OCREngine):
 
         elapsed = (time.perf_counter() - start) * 1000.0
         text, langs = parse_vision_ai_response(raw_text)
+        fmt_suffix = f" [{fmt}]" if fmt != "text" else ""
         return OCRResult(
             text=text,
-            engine_name=label,
+            engine_name=f"{label}{fmt_suffix}",
             confidence=0.98 if text else 0.0,
             languages=langs,
             elapsed_ms=round(elapsed, 1),
             script_used="all_languages",
         )
 
-    def _call_gemini(self, b64_png: str) -> tuple[str, str]:
+    def _call_gemini(self, b64_png: str, prompt: str) -> tuple[str, str]:
         api_key = self.config.effective_gemini_key()
         if not api_key:
             raise RuntimeError(
@@ -170,7 +201,7 @@ class VisionAIEngine(OCREngine):
             "contents": [
                 {
                     "parts": [
-                        {"text": VISION_OCR_PROMPT},
+                        {"text": prompt},
                         {"inline_data": {"mime_type": "image/png", "data": b64_png}},
                     ]
                 }
@@ -192,7 +223,7 @@ class VisionAIEngine(OCREngine):
         text = "".join(part.get("text", "") for part in parts if isinstance(part, dict))
         return text, f"Gemini ({model})"
 
-    def _call_openai(self, b64_png: str) -> tuple[str, str]:
+    def _call_openai(self, b64_png: str, prompt: str) -> tuple[str, str]:
         api_key = self.config.effective_openai_key()
         if not api_key:
             raise RuntimeError(
@@ -212,7 +243,7 @@ class VisionAIEngine(OCREngine):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": VISION_OCR_PROMPT},
+                        {"type": "text", "text": prompt},
                         {
                             "type": "image_url",
                             "image_url": {"url": f"data:image/png;base64,{b64_png}"},
@@ -236,7 +267,7 @@ class VisionAIEngine(OCREngine):
             )
         return str(content), f"OpenAI ({model})"
 
-    def _call_ollama(self, b64_png: str) -> tuple[str, str]:
+    def _call_ollama(self, b64_png: str, prompt: str) -> tuple[str, str]:
         base_url = (self.config.ollama_base_url.strip() or "http://localhost:11434").rstrip("/")
         model = self.config.ollama_model.strip() or "qwen2.5vl:7b"
         url = f"{base_url}/api/chat"
@@ -247,7 +278,7 @@ class VisionAIEngine(OCREngine):
             "messages": [
                 {
                     "role": "user",
-                    "content": VISION_OCR_PROMPT,
+                    "content": prompt,
                     "images": [b64_png],
                 }
             ],

@@ -26,14 +26,14 @@ Grab the latest pre-built app directly from the **[Releases Page](https://github
 
 ## Highlights
 
-- **Win+Shift+S Style Snipping Overlay** — Freezes your desktop across single or multi-monitor HiDPI displays, dims everything outside your selection, displays live pixel dimensions & crosshair guides, and cancels cleanly with `Esc` or right-click.
-- **Hybrid AI/ML OCR Pipeline** — Best of both worlds:
-  1. **Offline Deep-Learning OCR (RapidOCR + ONNX Runtime)** runs locally in milliseconds with zero API keys required. Uses the universal **PP-OCRv6** model by default plus on-demand **PP-OCRv5** specialized models covering **100+ languages**.
-  2. **Optional Vision AI (Gemini, OpenAI / Compatible, or Local Ollama VLMs)** automatically enhances low-confidence or empty snips in Hybrid mode — or runs on demand via the **`✨ AI Enhance`** button — to handle **all world languages, handwriting, vertical text, math, and complex layouts**.
-- **Automatic Multilingual Detection** — Combines Unicode script inspection (25+ writing systems) with statistical n-gram detection across 70+ languages, identifying single and mixed-language text (e.g., `English, Japanese`) and surfacing it directly in the popup.
-- **Built-In 1-Click Translation** — Translate extracted text into 25+ target languages right inside the floating popup (or via CLI `--translate en`). Uses your configured AI provider when set, or works out-of-the-box with free web translation (zero API keys needed), with an optional **Auto-Translate** mode in Settings.
-- **Instant Auto-Copy + Floating Preview/Edit Popup** — Automatically copies extracted text to your clipboard while opening a draggable dark-mode card where you can edit text, re-copy, translate, switch offline script models, or trigger **`✨ AI Enhance`** on the same capture without re-snipping.
-- **System Tray, Single-Instance Guard & Diagnostics** — Trigger from anywhere with `Ctrl+Shift+X` (customizable), left-click the tray icon, or re-launch the `.exe` (single-instance guard activates your existing tray app and starts a snip immediately). Rotating crash/diagnostic logs are one click away via **Tray → Open Logs Folder**.
+- **Win+Shift+S Style Snipping Overlay + Delayed Capture** — Freezes your desktop across single or multi-monitor HiDPI displays, dims everything outside your selection, displays live pixel dimensions & crosshair guides, and includes **3s / 5s Delayed Snip** in the tray for capturing hover tooltips and dropdown menus.
+- **Hybrid AI/ML OCR Pipeline + Language Pack Manager** — Best of both worlds:
+  1. **Offline Deep-Learning OCR (RapidOCR + ONNX Runtime)** runs locally with zero API keys required. Uses the universal **PP-OCRv6** model plus downloadable **PP-OCRv5** Language Packs covering **100+ languages**. With **Smart Offline Auto-Probe**, low-confidence `Auto` snips automatically test all installed offline packs (Korean, Russian, Arabic, Hindi, Thai, etc.) with zero manual switching.
+  2. **Optional Vision AI (Gemini, OpenAI / Compatible, or Local Ollama VLMs)** with selectable **Plain Text**, **Markdown / Tables**, and **Math / LaTeX** output modes for all world languages, handwriting, tables, code blocks, and equations.
+- **Automatic Multilingual Detection** — Combines Unicode script inspection (25+ writing systems) with statistical n-gram detection across 70+ languages, identifying single and mixed-language text (e.g., `English, Japanese`).
+- **Built-In 1-Click Translation** — Translate extracted text into 25+ target languages right inside the floating popup (or via CLI `--translate en`). Works out-of-the-box with free web translation (zero API keys needed) or via your configured AI provider.
+- **Floating Preview/Edit Popup + Paragraph Unwrap + Snip History** — Automatically copies extracted text, lets you **unwrap PDF/article line breaks (`¶ Unwrap`)** with 1 click, and saves captures + translations into a **searchable Snip History (`🕒`)** with Favorites/Pinning.
+- **System Tray, Single-Instance Guard & Diagnostics** — Trigger via `Ctrl+Shift+X`, tray icon, or re-launching the `.exe` (single-instance guard activates your running tray app and starts a snip immediately), with rotating crash logs at **Tray → Open Logs Folder**.
 
 ---
 
@@ -131,11 +131,15 @@ python -m ocr_snip --image screenshot.png --json
 python -m ocr_snip --image menu_kr.png --script korean
 python -m ocr_snip --image doc_ru.png --script eslav
 
+# Extract & unwrap hard PDF line breaks into flowing paragraphs
+python -m ocr_snip --image pdf_page.png --unwrap
+
 # Extract & translate into English (or any target language code)
 python -m ocr_snip --image menu_jp.png --translate en
 
-# Force Vision AI directly
-python -m ocr_snip --image handwriting.png --mode vision_ai
+# Force Vision AI directly (with Markdown tables or Math LaTeX output)
+python -m ocr_snip --image table.png --mode vision_ai --ai-format markdown
+python -m ocr_snip --image formula.png --mode vision_ai --ai-format latex
 ```
 
 ---
@@ -156,10 +160,12 @@ The standalone bundle is generated in `dist/OCRSnippingTool/`.
 ```text
 OCRSnippingTool/
 ├── ocr_snip/
-│   ├── __main__.py              # Desktop + CLI entry point (--image, --translate, --snip)
+│   ├── __main__.py              # Desktop + CLI entry point (--image, --translate, --unwrap, --ai-format)
 │   ├── config.py                # Persistent JSON config & persistent ONNX models dir
 │   ├── language.py              # Unicode script + statistical multilingual detector
 │   ├── translate.py             # Built-in 1-click translator (AI + zero-config free web)
+│   ├── history.py               # Persistent searchable snip history store with favorites
+│   ├── formatting.py            # Smart multilingual PDF/article paragraph unwrapping
 │   ├── single_instance.py       # Cross-platform QLocalServer single-instance guard
 │   ├── logging_utils.py         # Rotating file logs & friendly crash dialog handler
 │   ├── capture/
@@ -167,16 +173,17 @@ OCRSnippingTool/
 │   │   └── hotkey.py            # Cross-platform global hotkey bridge (pynput)
 │   ├── ocr/
 │   │   ├── base.py              # OCRResult, OCRLine, OCREngine interfaces
-│   │   ├── local_rapidocr.py    # Offline RapidOCR (ONNX PP-OCRv6 & PP-OCRv5)
-│   │   ├── vision_ai.py         # Gemini, OpenAI-compatible, and Ollama Vision AI
+│   │   ├── local_rapidocr.py    # Offline RapidOCR + Smart Auto-Probe + Language Pack Manager
+│   │   ├── vision_ai.py         # Gemini, OpenAI-compatible & Ollama (Text / Markdown / LaTeX)
 │   │   └── manager.py           # Hybrid OCR orchestrator
 │   └── ui/
-│       ├── app.py               # Main QApplication controller, tray, async workers
+│       ├── app.py               # Main QApplication controller, tray, delayed capture, async workers
 │       ├── overlay.py           # Fullscreen Win+Shift+S selection overlay
-│       ├── result_popup.py      # Draggable floating preview, edit & translate popup
-│       ├── settings_dialog.py   # General / OCR & Translate / Vision AI settings dialog
+│       ├── result_popup.py      # Draggable floating preview, edit, unwrap & translate popup
+│       ├── history_dialog.py    # Searchable Snip History window with favorites & copy
+│       ├── settings_dialog.py   # General / OCR & Translate / Language Packs / Vision AI tabs
 │       └── theme.py             # Dark slate stylesheet + vector icon generator
-├── tests/                       # Unit, end-to-end OCR, translation, and multi-OS UI tests
+├── tests/                       # Multi-OS unit, OCR, translation, history & PyQt6 UI tests
 ├── build_exe.py                 # Cross-platform PyInstaller bundler with auto-generated icons
 ├── pyproject.toml
 └── requirements.txt

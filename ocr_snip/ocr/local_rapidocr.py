@@ -1,12 +1,14 @@
 """Offline deep-learning OCR powered by RapidOCR (ONNX Runtime / PP-OCRv6 & PP-OCRv5).
 
 Supports 100+ languages completely offline:
-- Default `auto` / `universal` uses PP-OCRv6 multi-language ONNX model covering
-  English, Latin languages, Simplified/Traditional Chinese, Japanese, and Greek
-  in a single fast model.
-- Specialized PP-OCRv5 ONNX recognition models cover Korean, Cyrillic (Russian,
-  Ukrainian, etc.), Arabic (Arabic/Persian/Urdu), Devanagari (Hindi/Marathi/Nepali),
-  Thai, Latin (high-accuracy European diacritics), Greek, Tamil, and Telugu.
+- Default `auto` uses the PP-OCRv6 universal ONNX model (English, Latin languages,
+  Simplified/Traditional Chinese, Japanese, and Greek).
+- Specialized PP-OCRv5 ONNX recognition packs cover Latin (80+ European langs),
+  Korean, East Slavic (Russian/Ukrainian/Belarusian), Cyrillic, Arabic/Persian/Urdu,
+  Devanagari (Hindi/Marathi/Nepali), Thai, Greek, Tamil, and Telugu.
+- When `auto_probe_installed_scripts` is enabled, low-confidence `auto` snips
+  automatically probe any locally installed specialized language packs and pick
+  the highest-confidence recognition with zero manual switching.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -29,9 +32,10 @@ class ScriptProfile:
     key: str
     label: str
     description: str
-    ocr_version: str  # "PP-OCRv6" or "PP-OCRv5"
-    lang_rec: str     # LangRec enum value, e.g. "ch", "latin", "korean"
-    model_type: str   # "small" (for v6) or "mobile" (for v5)
+    ocr_version: str      # "PP-OCRv6" or "PP-OCRv5"
+    lang_rec: str         # LangRec enum value, e.g. "ch", "latin", "korean"
+    model_type: str       # "small" (for v6) or "mobile" (for v5)
+    model_filename: str   # Expected ONNX filename inside models_dir
 
 
 SCRIPT_PROFILES: dict[str, ScriptProfile] = {
@@ -42,6 +46,7 @@ SCRIPT_PROFILES: dict[str, ScriptProfile] = {
         ocr_version="PP-OCRv6",
         lang_rec="ch",
         model_type="small",
+        model_filename="PP-OCRv6_rec_small.onnx",
     ),
     "latin": ScriptProfile(
         key="latin",
@@ -50,6 +55,7 @@ SCRIPT_PROFILES: dict[str, ScriptProfile] = {
         ocr_version="PP-OCRv5",
         lang_rec="latin",
         model_type="mobile",
+        model_filename="latin_PP-OCRv5_rec_mobile.onnx",
     ),
     "korean": ScriptProfile(
         key="korean",
@@ -58,6 +64,7 @@ SCRIPT_PROFILES: dict[str, ScriptProfile] = {
         ocr_version="PP-OCRv5",
         lang_rec="korean",
         model_type="mobile",
+        model_filename="korean_PP-OCRv5_rec_mobile.onnx",
     ),
     "eslav": ScriptProfile(
         key="eslav",
@@ -66,6 +73,7 @@ SCRIPT_PROFILES: dict[str, ScriptProfile] = {
         ocr_version="PP-OCRv5",
         lang_rec="eslav",
         model_type="mobile",
+        model_filename="eslav_PP-OCRv5_rec_mobile.onnx",
     ),
     "cyrillic": ScriptProfile(
         key="cyrillic",
@@ -74,6 +82,7 @@ SCRIPT_PROFILES: dict[str, ScriptProfile] = {
         ocr_version="PP-OCRv5",
         lang_rec="cyrillic",
         model_type="mobile",
+        model_filename="cyrillic_PP-OCRv5_rec_mobile.onnx",
     ),
     "arabic": ScriptProfile(
         key="arabic",
@@ -82,6 +91,7 @@ SCRIPT_PROFILES: dict[str, ScriptProfile] = {
         ocr_version="PP-OCRv5",
         lang_rec="arabic",
         model_type="mobile",
+        model_filename="arabic_PP-OCRv5_rec_mobile.onnx",
     ),
     "devanagari": ScriptProfile(
         key="devanagari",
@@ -90,6 +100,7 @@ SCRIPT_PROFILES: dict[str, ScriptProfile] = {
         ocr_version="PP-OCRv5",
         lang_rec="devanagari",
         model_type="mobile",
+        model_filename="devanagari_PP-OCRv5_rec_mobile.onnx",
     ),
     "thai": ScriptProfile(
         key="thai",
@@ -98,6 +109,7 @@ SCRIPT_PROFILES: dict[str, ScriptProfile] = {
         ocr_version="PP-OCRv5",
         lang_rec="th",
         model_type="mobile",
+        model_filename="th_PP-OCRv5_rec_mobile.onnx",
     ),
     "greek": ScriptProfile(
         key="greek",
@@ -106,6 +118,7 @@ SCRIPT_PROFILES: dict[str, ScriptProfile] = {
         ocr_version="PP-OCRv5",
         lang_rec="el",
         model_type="mobile",
+        model_filename="el_PP-OCRv5_rec_mobile.onnx",
     ),
     "tamil": ScriptProfile(
         key="tamil",
@@ -114,6 +127,7 @@ SCRIPT_PROFILES: dict[str, ScriptProfile] = {
         ocr_version="PP-OCRv5",
         lang_rec="ta",
         model_type="mobile",
+        model_filename="ta_PP-OCRv5_rec_mobile.onnx",
     ),
     "telugu": ScriptProfile(
         key="telugu",
@@ -122,8 +136,35 @@ SCRIPT_PROFILES: dict[str, ScriptProfile] = {
         ocr_version="PP-OCRv5",
         lang_rec="te",
         model_type="mobile",
+        model_filename="te_PP-OCRv5_rec_mobile.onnx",
     ),
 }
+
+
+def is_script_installed(script_key: str, models_dir: Path | None = None) -> bool:
+    """Return True if the ONNX recognition model for `script_key` is already cached locally."""
+    profile = SCRIPT_PROFILES.get(script_key)
+    if profile is None:
+        return False
+    root = models_dir or get_models_dir()
+    if not root.exists():
+        return False
+    if (root / profile.model_filename).exists():
+        return True
+    return any(root.rglob(profile.model_filename))
+
+
+def list_installed_scripts(
+    models_dir: Path | None = None, *, exclude_auto: bool = False
+) -> list[str]:
+    """Return script keys whose ONNX packs are present in `models_dir`."""
+    installed: list[str] = []
+    for key in SCRIPT_PROFILES:
+        if exclude_auto and key == "auto":
+            continue
+        if is_script_installed(key, models_dir=models_dir):
+            installed.append(key)
+    return installed
 
 
 def preprocess_snip_image(image: Image.Image) -> np.ndarray:
@@ -155,15 +196,32 @@ def preprocess_snip_image(image: Image.Image) -> np.ndarray:
 
 
 class LocalRapidOCREngine(OCREngine):
-    """Offline ONNX OCR engine using RapidOCR with lazy model caching per script."""
+    """Offline ONNX OCR engine using RapidOCR with lazy model caching and smart auto-probe."""
 
     name = "Local ML (RapidOCR)"
 
-    def __init__(self, default_script: str = "auto", preserve_line_breaks: bool = True) -> None:
+    def __init__(
+        self,
+        default_script: str = "auto",
+        preserve_line_breaks: bool = True,
+        auto_probe_installed_scripts: bool = True,
+        offline_probe_threshold: float = 0.72,
+        models_dir: Path | None = None,
+    ) -> None:
         self.default_script = default_script if default_script in SCRIPT_PROFILES else "auto"
         self.preserve_line_breaks = preserve_line_breaks
+        self.auto_probe_installed_scripts = auto_probe_installed_scripts
+        self.offline_probe_threshold = offline_probe_threshold
+        self._models_dir = models_dir
         self._engines: dict[str, Any] = {}
         self._lock = threading.Lock()
+
+    @property
+    def models_dir(self) -> Path:
+        if self._models_dir is not None:
+            self._models_dir.mkdir(parents=True, exist_ok=True)
+            return self._models_dir
+        return get_models_dir()
 
     def _get_engine(self, script_key: str) -> Any:
         profile = SCRIPT_PROFILES.get(script_key, SCRIPT_PROFILES["auto"])
@@ -176,7 +234,7 @@ class LocalRapidOCREngine(OCREngine):
             params: dict[str, Any] = {
                 "Global.log_level": "warning",
                 "Global.text_score": 0.45,
-                "Global.model_root_dir": str(get_models_dir()),
+                "Global.model_root_dir": str(self.models_dir),
             }
             if profile.ocr_version == "PP-OCRv5":
                 params.update(
@@ -200,26 +258,52 @@ class LocalRapidOCREngine(OCREngine):
             self._engines[profile.key] = engine
             return engine
 
-    def recognize(
-        self,
-        image: Image.Image,
-        *,
-        script: str | None = None,
-        preserve_line_breaks: bool | None = None,
-        **kwargs: Any,
-    ) -> OCRResult:
-        script_key = script or self.default_script
+    def download_script_pack(self, script_key: str) -> Path:
+        """Download and cache the ONNX model pack for `script_key` into `models_dir`."""
         if script_key not in SCRIPT_PROFILES:
-            script_key = "auto"
-        profile = SCRIPT_PROFILES[script_key]
-        keep_breaks = (
-            self.preserve_line_breaks if preserve_line_breaks is None else preserve_line_breaks
-        )
+            raise ValueError(f"Unknown script pack: {script_key}")
+        engine = self._get_engine(script_key)
+        if script_key == "auto" and hasattr(engine, "_load_det_model"):
+            engine._load_det_model()
+        if hasattr(engine, "_load_rec_model"):
+            engine._load_rec_model()
+        return self.models_dir
 
+    def remove_script_pack(self, script_key: str) -> bool:
+        """Remove a cached ONNX language pack from `models_dir`."""
+        profile = SCRIPT_PROFILES.get(script_key)
+        if profile is None or script_key == "auto":
+            return False
+
+        with self._lock:
+            self._engines.pop(script_key, None)
+
+        removed = False
+        stem = Path(profile.model_filename).stem
+        for candidate in list(self.models_dir.rglob(f"*{stem}*")):
+            if candidate.is_file():
+                try:
+                    candidate.unlink()
+                    removed = True
+                except OSError:
+                    pass
+        # Also remove matching dict file if present (e.g. ppocrv5_korean_dict.txt)
+        dict_pattern = f"*{profile.lang_rec}*dict*.txt"
+        for dict_file in list(self.models_dir.rglob(dict_pattern)):
+            if dict_file.is_file():
+                try:
+                    dict_file.unlink()
+                except OSError:
+                    pass
+        return removed
+
+    def _run_single_script(
+        self, img_arr: np.ndarray, script_key: str, keep_breaks: bool
+    ) -> OCRResult:
+        profile = SCRIPT_PROFILES[script_key]
         start = time.perf_counter()
         try:
             engine = self._get_engine(script_key)
-            img_arr = preprocess_snip_image(image)
             raw = engine(img_arr)
         except Exception as exc:
             elapsed = (time.perf_counter() - start) * 1000.0
@@ -243,7 +327,6 @@ class LocalRapidOCREngine(OCREngine):
             bbox = boxes[idx].tolist() if idx < len(boxes) and hasattr(boxes[idx], "tolist") else []
             lines.append(OCRLine(text=str(txt), confidence=score, bbox=bbox))
 
-        # Group boxes into visual rows (top-to-bottom, left-to-right within each row)
         rows = _group_reading_rows(lines)
         ordered_lines = [line for row in rows for line in row]
         full_text = _format_rows(rows, preserve_breaks=keep_breaks)
@@ -263,6 +346,78 @@ class LocalRapidOCREngine(OCREngine):
             elapsed_ms=round(elapsed, 1),
             script_used=profile.key,
         )
+
+    def recognize(
+        self,
+        image: Image.Image,
+        *,
+        script: str | None = None,
+        preserve_line_breaks: bool | None = None,
+        allow_auto_probe: bool = True,
+        **kwargs: Any,
+    ) -> OCRResult:
+        script_key = script or self.default_script
+        if script_key not in SCRIPT_PROFILES:
+            script_key = "auto"
+        keep_breaks = (
+            self.preserve_line_breaks if preserve_line_breaks is None else preserve_line_breaks
+        )
+
+        total_start = time.perf_counter()
+        try:
+            img_arr = preprocess_snip_image(image)
+        except Exception as exc:
+            return OCRResult(
+                text="",
+                engine_name=self.name,
+                confidence=0.0,
+                script_used=script_key,
+                error=f"Image preprocessing failed: {exc}",
+            )
+
+        best = self._run_single_script(img_arr, script_key, keep_breaks)
+
+        # Smart Offline Multi-Script Auto-Probe:
+        # When running "auto" (universal PP-OCRv6) and confidence is low or text is empty,
+        # automatically test any installed specialized PP-OCRv5 language packs!
+        should_probe = (
+            script_key == "auto"
+            and allow_auto_probe
+            and self.auto_probe_installed_scripts
+            and (
+                not best.ok
+                or not best.text.strip()
+                or best.confidence < self.offline_probe_threshold
+            )
+        )
+        if should_probe:
+            installed_extras = list_installed_scripts(models_dir=self.models_dir, exclude_auto=True)
+            best_score = _candidate_quality_score(best)
+            best_probed_key: str | None = None
+
+            for extra_key in installed_extras:
+                candidate = self._run_single_script(img_arr, extra_key, keep_breaks)
+                cand_score = _candidate_quality_score(candidate)
+                if candidate.ok and candidate.text.strip() and cand_score > best_score + 0.04:
+                    best = candidate
+                    best_score = cand_score
+                    best_probed_key = extra_key
+
+            if best_probed_key is not None:
+                profile = SCRIPT_PROFILES[best_probed_key]
+                best.fallback_note = f"Auto-detected offline language pack: {profile.label}"
+                best.elapsed_ms = round((time.perf_counter() - total_start) * 1000.0, 1)
+
+        return best
+
+
+def _candidate_quality_score(res: OCRResult) -> float:
+    """Rank OCR candidates by confidence + non-empty meaningful character coverage."""
+    if not res.ok or not res.text.strip():
+        return 0.0
+    non_space = len("".join(res.text.split()))
+    length_bonus = min(0.05, non_space * 0.005)
+    return res.confidence + length_bonus
 
 
 def _group_reading_rows(lines: list[OCRLine]) -> list[list[OCRLine]]:

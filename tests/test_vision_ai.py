@@ -137,3 +137,43 @@ def test_openai_provider_mocked(monkeypatch) -> None:
     assert res.languages[0].code == "es"
     assert "OpenAI" in res.engine_name
 
+
+def test_vision_ai_markdown_and_latex_prompts(monkeypatch) -> None:
+    from ocr_snip.ocr.vision_ai import build_vision_prompt
+
+    assert "Markdown tables" in build_vision_prompt("markdown")
+    assert "LaTeX" in build_vision_prompt("latex")
+
+    captured_prompts: list[str] = []
+
+    def fake_post(self, url, **kwargs):
+        captured_prompts.append(kwargs["json"]["contents"][0]["parts"][0]["text"])
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "text": '{"text": "| A | B |\\n|---|---|\\n| 1 | 2 |", "languages": [{"code": "en", "name": "English"}]}'
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    cfg = AppConfig(ai_provider="gemini", gemini_api_key="key")
+    res = VisionAIEngine(cfg).recognize(
+        Image.new("RGB", (60, 30), "white"), output_format="markdown"
+    )
+    assert res.ok
+    assert "| A | B |" in res.text
+    assert "[markdown]" in res.engine_name
+    assert captured_prompts and "Markdown tables" in captured_prompts[0]
+
+
