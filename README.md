@@ -163,8 +163,9 @@ The standalone bundle is generated in `dist/OCRSnippingTool/`.
 OCRSnippingTool/
 ├── ocr_snip/
 │   ├── __main__.py              # Desktop + CLI entry point (--image, --translate, --unwrap, --ai-format)
-│   ├── config.py                # Persistent JSON config & persistent ONNX models dir
-│   ├── ai_client.py             # Shared Gemini / OpenAI / Ollama HTTP client
+│   ├── config.py                # Persistent JSON config (atomic 0o600 writes) & ONNX models dir
+│   ├── security.py              # URL/model validation, secret redaction, 0o600 atomic I/O & image guards
+│   ├── ai_client.py             # Pooled, redirect-safe Gemini / OpenAI / Ollama HTTP client
 │   ├── language.py              # Unicode script + statistical multilingual detector
 │   ├── translate.py             # Built-in 1-click translator (AI + zero-config free web)
 │   ├── history.py               # Persistent searchable snip history store with favorites

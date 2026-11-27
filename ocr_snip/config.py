@@ -111,10 +111,11 @@ class AppConfig:
         return False
 
     def save(self, path: Path | None = None) -> Path:
+        from ocr_snip.security import atomic_write_text
+
         target = path or get_config_path()
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(asdict(self), indent=2, ensure_ascii=False), encoding="utf-8")
-        return target
+        content = json.dumps(asdict(self), indent=2, ensure_ascii=False)
+        return atomic_write_text(target, content, private=True)
 
     @classmethod
     def load(cls, path: Path | None = None) -> "AppConfig":

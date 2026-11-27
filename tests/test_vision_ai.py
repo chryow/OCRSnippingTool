@@ -147,7 +147,8 @@ def test_vision_ai_markdown_and_latex_prompts(monkeypatch) -> None:
     captured_prompts: list[str] = []
 
     def fake_post(self, url, **kwargs):
-        captured_prompts.append(kwargs["json"]["contents"][0]["parts"][0]["text"])
+        sys_inst = kwargs["json"]["systemInstruction"]["parts"][0]["text"]
+        captured_prompts.append(sys_inst)
         return httpx.Response(
             200,
             json={

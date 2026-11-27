@@ -135,11 +135,35 @@ def main(argv: list[str] | None = None) -> int:
         else "pynput.mouse._darwin"
         if sys.platform == "darwin"
         else "pynput.mouse._xorg",
-        str(entry),
     ]
+
+    excluded_modules = [
+        "tkinter",
+        "_tkinter",
+        "unittest",
+        "pydoc",
+        "doctest",
+        "matplotlib",
+        "scipy",
+        "pytest",
+        "IPython",
+        "notebook",
+        "PyQt6.QtWebEngine",
+        "PyQt6.QtWebEngineWidgets",
+        "PyQt6.QtQml",
+        "PyQt6.QtQuick",
+        "PyQt6.QtMultimedia",
+        "PyQt6.Qt3DCore",
+        "PyQt6.QtSql",
+        "PyQt6.QtBluetooth",
+    ]
+    for mod in excluded_modules:
+        cmd.extend(["--exclude-module", mod])
 
     if sys.platform == "darwin":
         cmd.extend(["--osx-bundle-identifier", "com.chryow.ocrsnippingtool"])
+
+    cmd.append(str(entry))
 
     print("Running:", " ".join(cmd))
     return subprocess.call(cmd, cwd=root)

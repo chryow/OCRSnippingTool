@@ -167,27 +167,30 @@ def list_installed_scripts(
     return installed
 
 
-def preprocess_snip_image(image: Image.Image) -> np.ndarray:
-    """Prepare a tightly-cropped screen snip for accurate OCR detection.
+def preprocess_snip_image(image: Image.Image, max_side: int = 2400) -> np.ndarray:
+    """Prepare a screen snip for accurate, fast OCR detection.
 
     - Converts to RGB
-    - Upscales small snips so text line height is clear for DBNet++
-    - Adds subtle border padding around tightly-cropped regions
+    - Downscales giant 4K/8K captures cleanly to cap memory & cut CPU latency
+    - Upscales tiny snips so text line height is clear for DBNet++
+    - Adds subtle background-matched border padding around tightly-cropped regions
     """
     rgb = image.convert("RGB")
     w, h = rgb.size
     if w <= 0 or h <= 0:
         raise ValueError("Cannot run OCR on an empty image.")
 
-    # Upscale very small crops (common when snipping a single label or line)
+    max_dim = max(w, h)
     min_dim = min(w, h)
-    if min_dim < 64:
+    if max_dim > max_side:
+        scale = max_side / max_dim
+        rgb = rgb.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.Resampling.LANCZOS)
+    elif min_dim < 64:
         scale = min(3.0, max(2.0, 96.0 / max(min_dim, 1)))
         rgb = rgb.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
-    elif max(w, h) < 200:
+    elif max_dim < 200:
         rgb = rgb.resize((int(w * 1.5), int(h * 1.5)), Image.Resampling.LANCZOS)
 
-    # Estimate background edge color for natural border padding so dark-mode snips stay clean
     arr = np.asarray(rgb)
     border_pixels = np.concatenate([arr[0, :], arr[-1, :], arr[:, 0], arr[:, -1]], axis=0)
     median_bg = tuple(int(v) for v in np.median(border_pixels, axis=0))
