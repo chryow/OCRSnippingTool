@@ -33,7 +33,7 @@ def test_parse_plain_text_fallback() -> None:
 
 def test_gemini_provider_mocked(monkeypatch) -> None:
     def fake_post(self, url, **kwargs):
-        assert "gemini-2.5-flash:generateContent" in url
+        assert "gemini-3.8-flash:generateContent" in url
         assert kwargs["headers"]["x-goog-api-key"] == "fake-key"
         assert "params" not in kwargs or "key" not in (kwargs.get("params") or {})
         return httpx.Response(
@@ -63,6 +63,127 @@ def test_gemini_provider_mocked(monkeypatch) -> None:
     assert res.text == "Café crème"
     assert res.languages[0].name == "French"
     assert "Gemini" in res.engine_name
+
+
+def test_gemini_404_auto_recovers_from_error_hint(monkeypatch) -> None:
+    attempted_urls: list[str] = []
+
+    def fake_post(self, url, **kwargs):
+        attempted_urls.append(url)
+        if "gemini-2.5-flash:generateContent" in url:
+            return httpx.Response(
+                404,
+                json={
+                    "error": {
+                        "message": (
+                            "This model models/gemini-2.5-flash is no longer available to new users. "
+                            "Please update your code to use models/gemini-3.8-flash for the latest features."
+                        )
+                    }
+                },
+                request=httpx.Request("POST", url),
+            )
+        assert "gemini-3.8-flash:generateContent" in url
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "text": '{"text": "Recovered text", "languages": [{"code": "en", "name": "English"}]}'
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    cfg = AppConfig(ai_provider="gemini", gemini_api_key="fake-key", gemini_model="gemini-2.5-flash")
+    res = VisionAIEngine(cfg).recognize(Image.new("RGB", (60, 30), "white"))
+
+    assert res.ok
+    assert res.text == "Recovered text"
+    assert "gemini-3.8-flash" in res.engine_name
+    assert cfg.gemini_model == "gemini-3.8-flash"
+    assert len(attempted_urls) == 2
+
+
+def test_gemini_404_auto_recovers_from_models_catalog(monkeypatch) -> None:
+    def fake_post(self, url, **kwargs):
+        if "gemini-old-custom:generateContent" in url:
+            return httpx.Response(
+                404,
+                json={"error": {"message": "Model not found."}},
+                request=httpx.Request("POST", url),
+            )
+        assert "gemini-3.8-flash:generateContent" in url
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "text": '{"text": "Catalog text", "languages": [{"code": "en", "name": "English"}]}'
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+            request=httpx.Request("POST", url),
+        )
+
+    def fake_get(self, url, **kwargs):
+        assert url.endswith("/v1beta/models")
+        assert kwargs["headers"]["x-goog-api-key"] == "fake-key"
+        return httpx.Response(
+            200,
+            json={
+                "models": [
+                    {
+                        "name": "models/gemini-3.5-flash-lite",
+                        "supportedGenerationMethods": ["generateContent"],
+                    },
+                    {
+                        "name": "models/gemini-3.8-flash",
+                        "supportedGenerationMethods": ["generateContent"],
+                    },
+                    {
+                        "name": "models/gemini-4.0-flash-preview",
+                        "supportedGenerationMethods": ["generateContent"],
+                    },
+                ]
+            },
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    monkeypatch.setattr(httpx.Client, "get", fake_get)
+    cfg = AppConfig(ai_provider="gemini", gemini_api_key="fake-key", gemini_model="gemini-old-custom")
+    res = VisionAIEngine(cfg).recognize(Image.new("RGB", (60, 30), "white"))
+
+    assert res.ok
+    assert res.text == "Catalog text"
+    assert cfg.gemini_model == "gemini-3.8-flash"
+
+
+def test_config_migrates_deprecated_gemini_model(tmp_path) -> None:
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text('{"gemini_model": "gemini-2.5-flash"}', encoding="utf-8")
+    loaded = AppConfig.load(cfg_path)
+    assert loaded.gemini_model == "gemini-3.8-flash"
+
+    # Custom non-deprecated model is preserved untouched
+    cfg_path.write_text('{"gemini_model": "gemini-3.6-flash"}', encoding="utf-8")
+    loaded_custom = AppConfig.load(cfg_path)
+    assert loaded_custom.gemini_model == "gemini-3.6-flash"
 
 
 def test_gemini_http_error_sanitized(monkeypatch) -> None:
