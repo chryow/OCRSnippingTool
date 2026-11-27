@@ -25,10 +25,11 @@ from ocr_snip.ocr.manager import OCRManager
 from ocr_snip.single_instance import SingleInstanceGuard
 from ocr_snip.translate import TranslationResult, Translator
 from ocr_snip.ui.history_dialog import HistoryDialog
+from ocr_snip.ui.icons import svg_icon
 from ocr_snip.ui.overlay import SnipOverlay
 from ocr_snip.ui.result_popup import ResultPopup
 from ocr_snip.ui.settings_dialog import SettingsDialog
-from ocr_snip.ui.theme import DARK_STYLESHEET, create_app_icon
+from ocr_snip.ui.theme import DARK_STYLESHEET, SleekProxyStyle, create_app_icon
 
 logger = logging.getLogger("ocr_snip.app")
 
@@ -111,6 +112,9 @@ class OCRSnippingApp(QObject):
         self.qt_app.setQuitOnLastWindowClosed(False)
         self.qt_app.setApplicationName(__app_name__)
         self.qt_app.setApplicationVersion(__version__)
+        if not self.qt_app.property("_sleek_style_installed"):
+            self.qt_app.setStyle(SleekProxyStyle())
+            self.qt_app.setProperty("_sleek_style_installed", True)
         self.qt_app.setStyleSheet(DARK_STYLESHEET)
 
         self.icon = create_app_icon(64)
@@ -156,44 +160,46 @@ class OCRSnippingApp(QObject):
 
     def _setup_tray(self) -> None:
         self._tray_menu = QMenu()
+        self._tray_menu.setStyleSheet(DARK_STYLESHEET)
 
-        self.snip_action = QAction("✂ New OCR Snip", self)
+        self.snip_action = QAction(svg_icon("snip", 15, "#e4e4e7"), "New Snip", self)
         self.snip_action.triggered.connect(self.start_snip)
         self._tray_menu.addAction(self.snip_action)
 
-        delay3_action = QAction("⏱ Delayed Snip (3 seconds)", self)
-        delay3_action.triggered.connect(lambda: self.start_delayed_snip(3))
-        self._tray_menu.addAction(delay3_action)
+        self._delay_menu = QMenu("Delayed Snip", self._tray_menu)
+        self._delay_menu.setIcon(svg_icon("timer", 15, "#a1a1aa"))
+        self._delay_menu.setStyleSheet(DARK_STYLESHEET)
 
-        delay5_action = QAction("⏱ Delayed Snip (5 seconds)", self)
+        delay3_action = QAction("In 3 seconds", self._delay_menu)
+        delay3_action.triggered.connect(lambda: self.start_delayed_snip(3))
+        self._delay_menu.addAction(delay3_action)
+
+        delay5_action = QAction("In 5 seconds", self._delay_menu)
         delay5_action.triggered.connect(lambda: self.start_delayed_snip(5))
-        self._tray_menu.addAction(delay5_action)
+        self._delay_menu.addAction(delay5_action)
+        self._tray_menu.addMenu(self._delay_menu)
 
         self._tray_menu.addSeparator()
 
-        clip_action = QAction("📋 Extract from Clipboard Image", self)
+        clip_action = QAction(svg_icon("clipboard", 15, "#a1a1aa"), "From Clipboard", self)
         clip_action.triggered.connect(self.ocr_from_clipboard)
         self._tray_menu.addAction(clip_action)
 
-        file_action = QAction("🖼 Extract from Image File...", self)
+        file_action = QAction(svg_icon("image", 15, "#a1a1aa"), "From Image File...", self)
         file_action.triggered.connect(self.ocr_from_file)
         self._tray_menu.addAction(file_action)
 
-        history_action = QAction("🕒 Snip History...", self)
+        history_action = QAction(svg_icon("history", 15, "#a1a1aa"), "History", self)
         history_action.triggered.connect(self.open_history)
         self._tray_menu.addAction(history_action)
 
         self._tray_menu.addSeparator()
 
-        settings_action = QAction("⚙ Settings...", self)
+        settings_action = QAction(svg_icon("settings", 15, "#a1a1aa"), "Settings", self)
         settings_action.triggered.connect(self.open_settings)
         self._tray_menu.addAction(settings_action)
 
-        logs_action = QAction("📄 Open Logs Folder", self)
-        logs_action.triggered.connect(self.open_logs_folder)
-        self._tray_menu.addAction(logs_action)
-
-        quit_action = QAction("Quit", self)
+        quit_action = QAction(svg_icon("quit", 15, "#a1a1aa"), "Quit", self)
         quit_action.triggered.connect(self.quit)
         self._tray_menu.addAction(quit_action)
 
@@ -215,14 +221,12 @@ class OCRSnippingApp(QObject):
     def _apply_hotkey(self) -> None:
         ok = self.hotkey.start(self.config.hotkey)
         pretty = format_hotkey_display(self.config.hotkey)
-        self.snip_action.setText(f"✂ New OCR Snip  ({pretty})")
+        self.snip_action.setText(f"New Snip\t{pretty}")
         if ok:
-            self.tray.setToolTip(f"{__app_name__} — Press {pretty} or click to snip")
+            self.tray.setToolTip(f"{__app_name__} ({pretty})")
         else:
             logger.warning("Global hotkey %s unavailable: %s", self.config.hotkey, self.hotkey.last_error)
-            self.tray.setToolTip(
-                f"{__app_name__} — Click tray icon to snip (hotkey unavailable)"
-            )
+            self.tray.setToolTip(f"{__app_name__} — Click to snip")
 
     def show_startup_notice(self) -> None:
         pretty = format_hotkey_display(self.config.hotkey)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from PyQt6.QtCore import QThread, QUrl, pyqtSignal
+from PyQt6.QtCore import QSize, QThread, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -35,7 +35,8 @@ from ocr_snip.ocr.local_rapidocr import (
 )
 from ocr_snip.ocr.vision_ai import AI_OUTPUT_FORMATS
 from ocr_snip.translate import TARGET_LANGUAGES
-from ocr_snip.ui.theme import DARK_STYLESHEET, create_app_icon
+from ocr_snip.ui.icons import svg_icon
+from ocr_snip.ui.theme import apply_sleek_theme, create_app_icon
 
 
 class PackDownloadWorker(QThread):
@@ -71,11 +72,11 @@ class SettingsDialog(QDialog):
         self._pack_worker: PackDownloadWorker | None = None
         self._pack_rows: dict[str, tuple[QLabel, QPushButton, QPushButton]] = {}
 
-        self.setWindowTitle("OCRSnippingTool Settings")
+        self.setWindowTitle("Settings")
         self.setWindowIcon(create_app_icon(64))
         self.setMinimumWidth(580)
-        self.setStyleSheet(DARK_STYLESHEET)
         self._build_ui()
+        apply_sleek_theme(self)
         self._load_from_config()
 
     def _build_ui(self) -> None:
@@ -146,7 +147,7 @@ class SettingsDialog(QDialog):
         self.auto_copy_cb = QCheckBox("Automatically copy extracted text to clipboard")
         wf_layout.addWidget(self.auto_copy_cb)
 
-        self.show_popup_cb = QCheckBox("Show floating preview & edit popup after snip")
+        self.show_popup_cb = QCheckBox("Show floating preview and edit popup after snip")
         wf_layout.addWidget(self.show_popup_cb)
 
         self.preserve_breaks_cb = QCheckBox("Keep original multi-line breaks in extracted text")
@@ -162,8 +163,10 @@ class SettingsDialog(QDialog):
         layout.addWidget(wf_group)
 
         diag_row = QHBoxLayout()
-        logs_btn = QPushButton("📄 Open Logs Folder")
-        logs_btn.setToolTip("Open diagnostic log directory for troubleshooting")
+        logs_btn = QPushButton(" Open Logs Folder")
+        logs_btn.setIcon(svg_icon("folder", 14, "#a1a1aa"))
+        logs_btn.setIconSize(QSize(14, 14))
+        logs_btn.setToolTip("Open diagnostic log directory")
         logs_btn.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(get_logs_dir())))
         )
@@ -183,9 +186,9 @@ class SettingsDialog(QDialog):
         form = QFormLayout(mode_group)
 
         self.mode_combo = QComboBox()
-        self.mode_combo.addItem("Hybrid — Fast offline ML + automatic Vision AI fallback", "hybrid")
-        self.mode_combo.addItem("Offline Only — 100% private local ML (RapidOCR)", "local")
-        self.mode_combo.addItem("Vision AI Only — Cloud or Ollama VLM", "vision_ai")
+        self.mode_combo.addItem("Hybrid — Offline OCR + AI fallback", "hybrid")
+        self.mode_combo.addItem("Offline Only — 100% local OCR", "local")
+        self.mode_combo.addItem("Vision AI Only — Cloud or Ollama", "vision_ai")
         form.addRow("Mode:", self.mode_combo)
 
         self.script_combo = QComboBox()
@@ -194,7 +197,7 @@ class SettingsDialog(QDialog):
         form.addRow("Default offline script:", self.script_combo)
 
         self.auto_probe_cb = QCheckBox(
-            "Smart offline auto-probe (automatically test installed Language Packs on low confidence)"
+            "Automatically test installed Language Packs on low confidence"
         )
         form.addRow(self.auto_probe_cb)
 
@@ -215,7 +218,7 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(mode_group)
 
-        trans_group = QGroupBox("Built-In 1-Click Translation")
+        trans_group = QGroupBox("Translation")
         t_form = QFormLayout(trans_group)
 
         self.translate_lang_combo = QComboBox()
@@ -236,7 +239,7 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(trans_group)
         layout.addStretch()
-        self.tabs.addTab(tab, "OCR & Translate")
+        self.tabs.addTab(tab, "OCR && Translate")
 
     def _build_language_packs_tab(self) -> None:
         tab = QWidget()
@@ -311,7 +314,7 @@ class SettingsDialog(QDialog):
             installed = is_script_installed(key, models_dir=models_dir)
             if installed:
                 installed_count += 1
-                status_lbl.setText("✓ Installed")
+                status_lbl.setText("Installed")
                 status_lbl.setObjectName("PackStatusInstalled")
                 dl_btn.setText("Installed")
                 dl_btn.setEnabled(False)
@@ -325,7 +328,7 @@ class SettingsDialog(QDialog):
             status_lbl.style().unpolish(status_lbl)
             status_lbl.style().polish(status_lbl)
         self.pack_status_banner.setText(
-            f"{installed_count} of {len(SCRIPT_PROFILES)} offline packs cached in {models_dir}"
+            f"{installed_count} of {len(SCRIPT_PROFILES)} offline packs installed"
         )
 
     def _download_pack(self, script_key: str) -> None:
@@ -347,7 +350,7 @@ class SettingsDialog(QDialog):
         self._pack_worker = None
         self.refresh_language_packs()
         if not ok:
-            self.pack_status_banner.setText(f"⚠ Failed to download {script_key}: {message}")
+            self.pack_status_banner.setText(f"Failed to download {script_key}: {message}")
 
     def _remove_pack(self, script_key: str) -> None:
         self._local_engine.remove_script_pack(script_key)
@@ -359,20 +362,20 @@ class SettingsDialog(QDialog):
         layout.setSpacing(12)
 
         intro = QLabel(
-            "Optional: connect a Vision AI model for handwriting, complex tables (Markdown), "
-            "math equations (LaTeX), or rare scripts. Offline OCR still works with zero keys."
+            "Optional: connect an AI model for handwriting, complex tables (Markdown), "
+            "math equations (LaTeX), or rare scripts. Offline OCR works with zero keys."
         )
         intro.setObjectName("MutedLabel")
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
-        provider_group = QGroupBox("Vision AI Provider")
+        provider_group = QGroupBox("Provider")
         form = QFormLayout(provider_group)
 
         self.provider_combo = QComboBox()
         self.provider_combo.addItem("Google Gemini", "gemini")
-        self.provider_combo.addItem("OpenAI / OpenAI-Compatible API", "openai")
-        self.provider_combo.addItem("Ollama (Local Vision Model)", "ollama")
+        self.provider_combo.addItem("OpenAI / Compatible API", "openai")
+        self.provider_combo.addItem("Ollama (Local)", "ollama")
         self.provider_combo.currentIndexChanged.connect(self._update_provider_fields)
         form.addRow("Active provider:", self.provider_combo)
 
@@ -416,7 +419,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(self.openai_group)
 
         # Ollama group
-        self.ollama_group = QGroupBox("Ollama (100% Local Vision LLM)")
+        self.ollama_group = QGroupBox("Ollama (Local)")
         ol_form = QFormLayout(self.ollama_group)
         self.ollama_url_edit = QLineEdit()
         self.ollama_url_edit.setPlaceholderText("http://localhost:11434")
@@ -442,8 +445,11 @@ class SettingsDialog(QDialog):
         edit.setPlaceholderText(placeholder)
         row.addWidget(edit, stretch=1)
 
-        toggle_btn = QPushButton("👁")
+        toggle_btn = QPushButton()
         toggle_btn.setObjectName("IconButton")
+        toggle_btn.setIcon(svg_icon("eye", 15, "#a1a1aa"))
+        toggle_btn.setIconSize(QSize(15, 15))
+        toggle_btn.setFixedSize(28, 28)
         toggle_btn.setCheckable(True)
         toggle_btn.setToolTip("Show / hide API key")
         toggle_btn.toggled.connect(
@@ -499,9 +505,13 @@ class SettingsDialog(QDialog):
 
         temp = self.build_config()
         if temp.is_vision_ai_configured():
-            self.ai_status_label.setText("✓ Ready")
+            self.ai_status_label.setText("Ready")
+            self.ai_status_label.setObjectName("PackStatusInstalled")
         else:
-            self.ai_status_label.setText("Not configured (optional — offline ML still works)")
+            self.ai_status_label.setText("Not configured (optional — offline OCR works without keys)")
+            self.ai_status_label.setObjectName("MutedLabel")
+        self.ai_status_label.style().unpolish(self.ai_status_label)
+        self.ai_status_label.style().polish(self.ai_status_label)
 
     def build_config(self) -> AppConfig:
         return replace(

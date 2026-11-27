@@ -146,7 +146,7 @@ class SnipOverlay(QWidget):
         painter.drawPixmap(self.rect(), self._pixmap)
 
         # 2. Dim the entire screen EXCEPT the selected rectangle
-        dim_color = QColor(10, 12, 20, 130)
+        dim_color = QColor(9, 9, 11, 138)
         rect = self.selection_rect
         if self._dragging and rect.width() > 1 and rect.height() > 1:
             path = QPainterPath()
@@ -155,39 +155,40 @@ class SnipOverlay(QWidget):
             path.setFillRule(Qt.FillRule.OddEvenFill)
             painter.fillPath(path, dim_color)
 
-            # Luminous indigo border
-            border_pen = QPen(QColor("#818cf8"), 2)
-            painter.setPen(border_pen)
+            # Subtle dark outer contrast stroke + crisp pure-white selection frame
+            painter.setPen(QPen(QColor(0, 0, 0, 140), 3))
+            painter.drawRect(rect)
+            painter.setPen(QPen(QColor("#ffffff"), 1.5))
             painter.drawRect(rect)
 
-            # Crisp corner accents
+            # Minimal corner handles
             self._draw_corner_handles(painter, rect)
 
             # Floating dimensions pill
             self._draw_dimensions_pill(painter, rect)
         else:
             painter.fillRect(self.rect(), dim_color)
-            # Subtle crosshair guide lines before dragging
+            # Subtle hairline crosshair guides before dragging
             if self._cursor_pos.x() >= 0:
-                guide_pen = QPen(QColor(255, 255, 255, 45), 1, Qt.PenStyle.DashLine)
+                guide_pen = QPen(QColor(255, 255, 255, 38), 1, Qt.PenStyle.SolidLine)
                 painter.setPen(guide_pen)
                 painter.drawLine(0, self._cursor_pos.y(), self.width(), self._cursor_pos.y())
                 painter.drawLine(self._cursor_pos.x(), 0, self._cursor_pos.x(), self.height())
 
-        # 3. Top-center instruction banner
+        # 3. Top-center instruction pill
         self._draw_instruction_banner(painter)
         painter.end()
 
     def _draw_corner_handles(self, painter: QPainter, rect: QRect) -> None:
         painter.setBrush(QColor("#ffffff"))
-        painter.setPen(QPen(QColor("#4f46e5"), 1.5))
-        r = 4
+        painter.setPen(QPen(QColor("#18181b"), 1.2))
+        r = 3.5
         for pt in (rect.topLeft(), rect.topRight(), rect.bottomLeft(), rect.bottomRight()):
             painter.drawEllipse(pt, r, r)
 
     def _draw_dimensions_pill(self, painter: QPainter, rect: QRect) -> None:
-        label = f"{rect.width()} × {rect.height()} px"
-        font = QFont("Segoe UI", 10, QFont.Weight.DemiBold)
+        label = f"{rect.width()} × {rect.height()}"
+        font = QFont("Segoe UI", 9, QFont.Weight.DemiBold)
         painter.setFont(font)
         fm = painter.fontMetrics()
         tw = fm.horizontalAdvance(label) + 16
@@ -200,15 +201,15 @@ class SnipOverlay(QWidget):
         px = max(8, min(self.width() - tw - 8, px))
 
         pill = QRectF(px, py, tw, th)
-        painter.setPen(QPen(QColor(129, 140, 248, 160), 1))
-        painter.setBrush(QColor(17, 20, 30, 225))
-        painter.drawRoundedRect(pill, 7, 7)
-        painter.setPen(QColor("#e2e8f0"))
+        painter.setPen(QPen(QColor(255, 255, 255, 38), 1))
+        painter.setBrush(QColor(20, 20, 23, 230))
+        painter.drawRoundedRect(pill, 6, 6)
+        painter.setPen(QColor("#f4f4f5"))
         painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, label)
 
     def _draw_instruction_banner(self, painter: QPainter) -> None:
-        text = "Drag to select text to extract  •  Esc or Right-Click to cancel"
-        font = QFont("Segoe UI", 11, QFont.Weight.DemiBold)
+        text = "Drag to capture text  ·  Esc or Right-Click to cancel"
+        font = QFont("Segoe UI", 10, QFont.Weight.Medium)
         painter.setFont(font)
         fm = painter.fontMetrics()
         tw = fm.horizontalAdvance(text) + 32
@@ -217,8 +218,8 @@ class SnipOverlay(QWidget):
         bx = (self.width() - tw) / 2
         by = 20
         banner = QRectF(bx, by, tw, th)
-        painter.setPen(QPen(QColor(129, 140, 248, 130), 1))
-        painter.setBrush(QColor(17, 20, 30, 225))
+        painter.setPen(QPen(QColor(255, 255, 255, 34), 1))
+        painter.setBrush(QColor(20, 20, 23, 230))
         painter.drawRoundedRect(banner, th / 2, th / 2)
-        painter.setPen(QColor("#f1f5f9"))
+        painter.setPen(QColor("#f4f4f5"))
         painter.drawText(banner, Qt.AlignmentFlag.AlignCenter, text)

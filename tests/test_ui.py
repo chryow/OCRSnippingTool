@@ -307,5 +307,39 @@ def test_result_popup_preserves_text_on_ai_error_and_resets_placeholders(qtbot) 
     assert not popup.copy_trans_btn.isEnabled()
 
 
+def test_vector_icons_and_tray_menu_styling(qtbot, tmp_path) -> None:
+    from PyQt6.QtWidgets import QApplication
+
+    from ocr_snip.history import HistoryStore
+    from ocr_snip.ui.app import OCRSnippingApp
+    from ocr_snip.ui.icons import svg_icon
+
+    for name in ("snip", "history", "pin", "pin_filled", "settings", "close", "copy", "check", "translate", "enhance", "unwrap", "clipboard", "image", "timer", "folder", "quit", "star", "star_filled", "trash", "eye"):
+        icon = svg_icon(name, 16)
+        assert not icon.isNull()
+
+    qt_app = QApplication.instance()
+    assert isinstance(qt_app, QApplication)
+    controller = OCRSnippingApp(
+        qt_app,
+        config=AppConfig(engine_mode="local"),
+        history_store=HistoryStore(path=tmp_path / "history.json"),
+    )
+    try:
+        assert qt_app.property("_sleek_style_installed") is True
+        assert "QMenu" in controller._tray_menu.styleSheet()
+        assert "QMenu" in controller._delay_menu.styleSheet()
+        action_texts = [a.text() for a in controller._tray_menu.actions() if not a.isSeparator()]
+        assert any("New Snip" in t for t in action_texts)
+        assert any("Delayed Snip" in t for t in action_texts)
+        assert any("Settings" in t for t in action_texts)
+        assert any("Quit" in t for t in action_texts)
+    finally:
+        controller.hotkey.stop()
+        controller.tray.hide()
+        controller.popup.hide()
+
+
+
 
 
