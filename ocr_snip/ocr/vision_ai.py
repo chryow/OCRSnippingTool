@@ -1,7 +1,7 @@
 """Optional Vision AI OCR engines (Gemini, OpenAI / OpenAI-compatible, Ollama).
 
 Provides universal multilingual OCR across all world languages, handwriting,
-vertical text, mixed scripts, math/code, and low-contrast screenshots.
+vertical text, mixed scripts, Markdown tables, math/LaTeX, and low-contrast captures.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 from PIL import Image
 
+from ocr_snip.ai_client import call_ai_provider, extract_http_error_detail
 from ocr_snip.config import AppConfig
 from ocr_snip.language import detect_languages, language_name
 from ocr_snip.ocr.base import DetectedLanguage, OCREngine, OCRResult
@@ -76,11 +77,11 @@ def parse_vision_ai_response(raw_text: str) -> tuple[str, list[DetectedLanguage]
     if not cleaned:
         return "", []
 
-    # Strip optional markdown code fences (```json ... ```)
-    fence_match = re.search(r"```(?:json)?\s*(.*?)\s*```", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    fence_match = re.search(
+        r"```(?:json)?\s*(.*?)\s*```", cleaned, flags=re.DOTALL | re.IGNORECASE
+    )
     candidate = fence_match.group(1).strip() if fence_match else cleaned
 
-    # Try parsing direct JSON or first JSON object inside the response
     json_str = candidate
     if not json_str.startswith("{"):
         brace_start = json_str.find("{")
@@ -105,11 +106,7 @@ def parse_vision_ai_response(raw_text: str) -> tuple[str, list[DetectedLanguage]
                             )
                     elif isinstance(item, str) and item.strip():
                         langs.append(
-                            DetectedLanguage(
-                                code="",
-                                name=item.strip(),
-                                confidence=0.95,
-                            )
+                            DetectedLanguage(code="", name=item.strip(), confidence=0.95)
                         )
             if extracted and not langs:
                 langs = detect_languages(extracted)
@@ -117,7 +114,6 @@ def parse_vision_ai_response(raw_text: str) -> tuple[str, list[DetectedLanguage]
     except json.JSONDecodeError:
         pass
 
-    # Fallback: treat model output as raw extracted text
     extracted = candidate
     langs = detect_languages(extracted) if extracted else []
     return extracted, langs
@@ -142,17 +138,17 @@ class VisionAIEngine(OCREngine):
 
         try:
             b64_png = _encode_image_png_base64(image)
-            if provider == "gemini":
-                raw_text, label = self._call_gemini(b64_png, prompt)
-            elif provider == "openai":
-                raw_text, label = self._call_openai(b64_png, prompt)
-            elif provider == "ollama":
-                raw_text, label = self._call_ollama(b64_png, prompt)
-            else:
-                raise ValueError(f"Unsupported Vision AI provider: {provider}")
+            raw_text, label = call_ai_provider(
+                self.config,
+                prompt,
+                image_b64=b64_png,
+                temperature=0.0,
+                json_mode=True,
+                timeout=self.timeout,
+            )
         except httpx.HTTPStatusError as exc:
             elapsed = (time.perf_counter() - start) * 1000.0
-            detail = _extract_http_error_detail(exc.response)
+            detail = extract_http_error_detail(exc.response)
             return OCRResult(
                 text="",
                 engine_name=f"Vision AI ({provider})",
@@ -181,129 +177,3 @@ class VisionAIEngine(OCREngine):
             elapsed_ms=round(elapsed, 1),
             script_used="all_languages",
         )
-
-    def _call_gemini(self, b64_png: str, prompt: str) -> tuple[str, str]:
-        api_key = self.config.effective_gemini_key()
-        if not api_key:
-            raise RuntimeError(
-                "Gemini API key not set. Add it in Settings or set GEMINI_API_KEY."
-            )
-        model = self.config.gemini_model.strip() or "gemini-2.5-flash"
-        url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{model}:generateContent"
-        )
-        headers = {
-            "x-goog-api-key": api_key,
-            "Content-Type": "application/json",
-        }
-        body = {
-            "contents": [
-                {
-                    "parts": [
-                        {"text": prompt},
-                        {"inline_data": {"mime_type": "image/png", "data": b64_png}},
-                    ]
-                }
-            ],
-            "generationConfig": {
-                "temperature": 0.0,
-                "responseMimeType": "application/json",
-            },
-        }
-        with httpx.Client(timeout=self.timeout) as client:
-            resp = client.post(url, headers=headers, json=body)
-            resp.raise_for_status()
-            data = resp.json()
-
-        candidates = data.get("candidates", [])
-        if not candidates:
-            raise RuntimeError("Gemini returned no candidates.")
-        parts = candidates[0].get("content", {}).get("parts", [])
-        text = "".join(part.get("text", "") for part in parts if isinstance(part, dict))
-        return text, f"Gemini ({model})"
-
-    def _call_openai(self, b64_png: str, prompt: str) -> tuple[str, str]:
-        api_key = self.config.effective_openai_key()
-        if not api_key:
-            raise RuntimeError(
-                "OpenAI API key not set. Add it in Settings or set OPENAI_API_KEY."
-            )
-        base_url = (self.config.openai_base_url.strip() or "https://api.openai.com/v1").rstrip("/")
-        model = self.config.openai_model.strip() or "gpt-4o-mini"
-        url = f"{base_url}/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-        body = {
-            "model": model,
-            "temperature": 0.0,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{b64_png}"},
-                        },
-                    ],
-                }
-            ],
-        }
-        with httpx.Client(timeout=self.timeout) as client:
-            resp = client.post(url, headers=headers, json=body)
-            resp.raise_for_status()
-            data = resp.json()
-
-        choices = data.get("choices", [])
-        if not choices:
-            raise RuntimeError("OpenAI API returned no choices.")
-        content = choices[0].get("message", {}).get("content", "")
-        if isinstance(content, list):
-            content = "".join(
-                block.get("text", "") for block in content if isinstance(block, dict)
-            )
-        return str(content), f"OpenAI ({model})"
-
-    def _call_ollama(self, b64_png: str, prompt: str) -> tuple[str, str]:
-        base_url = (self.config.ollama_base_url.strip() or "http://localhost:11434").rstrip("/")
-        model = self.config.ollama_model.strip() or "qwen2.5vl:7b"
-        url = f"{base_url}/api/chat"
-        body = {
-            "model": model,
-            "stream": False,
-            "options": {"temperature": 0.0},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt,
-                    "images": [b64_png],
-                }
-            ],
-        }
-        with httpx.Client(timeout=self.timeout) as client:
-            resp = client.post(url, json=body)
-            resp.raise_for_status()
-            data = resp.json()
-
-        message = data.get("message", {})
-        content = str(message.get("content", ""))
-        return content, f"Ollama ({model})"
-
-
-def _extract_http_error_detail(response: httpx.Response) -> str:
-    """Extract a concise, safe error message from a failed HTTP API response."""
-    try:
-        payload = response.json()
-        if isinstance(payload, dict):
-            err = payload.get("error")
-            if isinstance(err, dict) and err.get("message"):
-                return str(err["message"])
-            if isinstance(err, str) and err:
-                return err
-    except Exception:
-        pass
-    return response.reason_phrase or "Request failed"
-

@@ -504,6 +504,9 @@ class OCRSnippingApp(QObject):
         self.hotkey.stop()
         if self._instance_guard is not None:
             self._instance_guard.stop()
+        for worker in (self._worker, self._translate_worker):
+            if worker is not None and worker.isRunning():
+                worker.wait(1000)
         if self._history_dialog is not None:
             self._history_dialog.close()
         self.tray.hide()

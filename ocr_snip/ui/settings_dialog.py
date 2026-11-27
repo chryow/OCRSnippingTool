@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from PyQt6.QtCore import Qt, QThread, QUrl, pyqtSignal
+from PyQt6.QtCore import QThread, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -73,7 +73,7 @@ class SettingsDialog(QDialog):
 
         self.setWindowTitle("OCRSnippingTool Settings")
         self.setWindowIcon(create_app_icon(64))
-        self.setMinimumWidth(560)
+        self.setMinimumWidth(580)
         self.setStyleSheet(DARK_STYLESHEET)
         self._build_ui()
         self._load_from_config()
@@ -91,7 +91,6 @@ class SettingsDialog(QDialog):
         self._build_language_packs_tab()
         self._build_vision_ai_tab()
 
-        # Buttons row
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 
@@ -126,7 +125,7 @@ class SettingsDialog(QDialog):
         hk_layout.addLayout(hk_form)
 
         presets_row = QHBoxLayout()
-        presets_label = QLabel("Presets:")
+        presets_label = QLabel("Quick presets:")
         presets_label.setObjectName("MutedLabel")
         presets_row.addWidget(presets_label)
         for label, combo in (
@@ -141,7 +140,7 @@ class SettingsDialog(QDialog):
         hk_layout.addLayout(presets_row)
         layout.addWidget(hk_group)
 
-        wf_group = QGroupBox("Post-Capture Workflow")
+        wf_group = QGroupBox("After Snipping")
         wf_layout = QVBoxLayout(wf_group)
 
         self.auto_copy_cb = QCheckBox("Automatically copy extracted text to clipboard")
@@ -150,7 +149,7 @@ class SettingsDialog(QDialog):
         self.show_popup_cb = QCheckBox("Show floating preview & edit popup after snip")
         wf_layout.addWidget(self.show_popup_cb)
 
-        self.preserve_breaks_cb = QCheckBox("Preserve multi-line breaks in extracted text")
+        self.preserve_breaks_cb = QCheckBox("Keep original multi-line breaks in extracted text")
         wf_layout.addWidget(self.preserve_breaks_cb)
 
         timer_form = QFormLayout()
@@ -164,7 +163,7 @@ class SettingsDialog(QDialog):
 
         diag_row = QHBoxLayout()
         logs_btn = QPushButton("📄 Open Logs Folder")
-        logs_btn.setToolTip("Open diagnostic log directory")
+        logs_btn.setToolTip("Open diagnostic log directory for troubleshooting")
         logs_btn.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(get_logs_dir())))
         )
@@ -180,14 +179,14 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(tab)
         layout.setSpacing(12)
 
-        mode_group = QGroupBox("Hybrid AI/ML OCR Mode")
+        mode_group = QGroupBox("OCR Engine")
         form = QFormLayout(mode_group)
 
         self.mode_combo = QComboBox()
-        self.mode_combo.addItem("Hybrid (Offline ML + Auto Vision AI fallback)", "hybrid")
-        self.mode_combo.addItem("Offline ML Only (RapidOCR — 100% private)", "local")
-        self.mode_combo.addItem("Vision AI Only (Gemini / OpenAI / Ollama)", "vision_ai")
-        form.addRow("Engine mode:", self.mode_combo)
+        self.mode_combo.addItem("Hybrid — Fast offline ML + automatic Vision AI fallback", "hybrid")
+        self.mode_combo.addItem("Offline Only — 100% private local ML (RapidOCR)", "local")
+        self.mode_combo.addItem("Vision AI Only — Cloud or Ollama VLM", "vision_ai")
+        form.addRow("Mode:", self.mode_combo)
 
         self.script_combo = QComboBox()
         for key, profile in SCRIPT_PROFILES.items():
@@ -195,7 +194,7 @@ class SettingsDialog(QDialog):
         form.addRow("Default offline script:", self.script_combo)
 
         self.auto_probe_cb = QCheckBox(
-            "Smart offline auto-probe: automatically check installed Language Packs on low confidence"
+            "Smart offline auto-probe (automatically test installed Language Packs on low confidence)"
         )
         form.addRow(self.auto_probe_cb)
 
@@ -207,7 +206,7 @@ class SettingsDialog(QDialog):
             "In Hybrid mode, if offline confidence drops below this threshold "
             "and Vision AI is configured, automatically refine with Vision AI."
         )
-        form.addRow("Hybrid AI fallback threshold:", self.threshold_spin)
+        form.addRow("AI fallback threshold:", self.threshold_spin)
 
         self.ai_format_combo = QComboBox()
         for code, label in AI_OUTPUT_FORMATS:
@@ -267,27 +266,22 @@ class SettingsDialog(QDialog):
 
         for key, profile in SCRIPT_PROFILES.items():
             row_frame = QFrame()
-            row_frame.setStyleSheet(
-                "QFrame { background-color: #0e1018; border: 1px solid #252b3d; "
-                "border-radius: 8px; padding: 4px; }"
-            )
+            row_frame.setObjectName("PackCard")
             row_layout = QHBoxLayout(row_frame)
-            row_layout.setContentsMargins(10, 6, 10, 6)
+            row_layout.setContentsMargins(12, 8, 12, 8)
             row_layout.setSpacing(8)
 
             info_col = QVBoxLayout()
             info_col.setSpacing(2)
             name_lbl = QLabel(profile.label)
-            name_lbl.setStyleSheet("border: none; font-weight: 600;")
+            name_lbl.setObjectName("PackTitle")
             desc_lbl = QLabel(profile.description)
-            desc_lbl.setObjectName("MutedLabel")
-            desc_lbl.setStyleSheet("border: none; color: #8892b0; font-size: 11px;")
+            desc_lbl.setObjectName("PackDesc")
             info_col.addWidget(name_lbl)
             info_col.addWidget(desc_lbl)
             row_layout.addLayout(info_col, stretch=1)
 
             status_lbl = QLabel("")
-            status_lbl.setStyleSheet("border: none;")
             row_layout.addWidget(status_lbl)
 
             dl_btn = QPushButton("Download")
@@ -318,18 +312,18 @@ class SettingsDialog(QDialog):
             if installed:
                 installed_count += 1
                 status_lbl.setText("✓ Installed")
-                status_lbl.setStyleSheet(
-                    "border: none; color: #6ee7b7; font-size: 11px; font-weight: 600;"
-                )
+                status_lbl.setObjectName("PackStatusInstalled")
                 dl_btn.setText("Installed")
                 dl_btn.setEnabled(False)
                 rm_btn.setEnabled(key != "auto")
             else:
                 status_lbl.setText("Available")
-                status_lbl.setStyleSheet("border: none; color: #8892b0; font-size: 11px;")
+                status_lbl.setObjectName("PackStatusAvailable")
                 dl_btn.setText("Download")
                 dl_btn.setEnabled(self._pack_worker is None)
                 rm_btn.setEnabled(False)
+            status_lbl.style().unpolish(status_lbl)
+            status_lbl.style().polish(status_lbl)
         self.pack_status_banner.setText(
             f"{installed_count} of {len(SCRIPT_PROFILES)} offline packs cached in {models_dir}"
         )
@@ -364,7 +358,15 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(tab)
         layout.setSpacing(12)
 
-        provider_group = QGroupBox("Vision AI Provider (Optional)")
+        intro = QLabel(
+            "Optional: connect a Vision AI model for handwriting, complex tables (Markdown), "
+            "math equations (LaTeX), or rare scripts. Offline OCR still works with zero keys."
+        )
+        intro.setObjectName("MutedLabel")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        provider_group = QGroupBox("Vision AI Provider")
         form = QFormLayout(provider_group)
 
         self.provider_combo = QComboBox()
@@ -382,9 +384,11 @@ class SettingsDialog(QDialog):
         # Gemini group
         self.gemini_group = QGroupBox("Google Gemini")
         g_form = QFormLayout(self.gemini_group)
-        self.gemini_key_edit = self._make_secret_edit("Reads GEMINI_API_KEY env var if left blank")
+        gemini_key_row, self.gemini_key_edit = self._make_secret_row(
+            "Reads GEMINI_API_KEY env var if left blank"
+        )
         self.gemini_key_edit.textChanged.connect(self._update_provider_fields)
-        g_form.addRow("API Key:", self.gemini_key_edit)
+        g_form.addRow("API Key:", gemini_key_row)
         self.gemini_model_edit = QLineEdit()
         self.gemini_model_edit.setPlaceholderText("gemini-2.5-flash")
         g_form.addRow("Model:", self.gemini_model_edit)
@@ -393,9 +397,11 @@ class SettingsDialog(QDialog):
         # OpenAI group
         self.openai_group = QGroupBox("OpenAI / Compatible Endpoint")
         o_form = QFormLayout(self.openai_group)
-        self.openai_key_edit = self._make_secret_edit("Reads OPENAI_API_KEY env var if left blank")
+        openai_key_row, self.openai_key_edit = self._make_secret_row(
+            "Reads OPENAI_API_KEY env var if left blank"
+        )
         self.openai_key_edit.textChanged.connect(self._update_provider_fields)
-        o_form.addRow("API Key:", self.openai_key_edit)
+        o_form.addRow("API Key:", openai_key_row)
         self.openai_url_edit = QLineEdit()
         self.openai_url_edit.setPlaceholderText("https://api.openai.com/v1")
         o_form.addRow("Base URL:", self.openai_url_edit)
@@ -420,11 +426,28 @@ class SettingsDialog(QDialog):
         layout.addStretch()
         self.tabs.addTab(tab, "Vision AI")
 
-    def _make_secret_edit(self, placeholder: str) -> QLineEdit:
+    def _make_secret_row(self, placeholder: str) -> tuple[QWidget, QLineEdit]:
+        container = QWidget()
+        row = QHBoxLayout(container)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+
         edit = QLineEdit()
         edit.setEchoMode(QLineEdit.EchoMode.Password)
         edit.setPlaceholderText(placeholder)
-        return edit
+        row.addWidget(edit, stretch=1)
+
+        toggle_btn = QPushButton("👁")
+        toggle_btn.setObjectName("IconButton")
+        toggle_btn.setCheckable(True)
+        toggle_btn.setToolTip("Show / hide API key")
+        toggle_btn.toggled.connect(
+            lambda checked, e=edit: e.setEchoMode(
+                QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
+            )
+        )
+        row.addWidget(toggle_btn)
+        return container, edit
 
     def _load_from_config(self) -> None:
         c = self._config
