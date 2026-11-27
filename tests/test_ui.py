@@ -130,6 +130,7 @@ def test_app_controller_end_to_end_capture_to_clipboard_and_popup(qtbot, tmp_pat
         assert store.entries[0].text == "こんにちは世界"
     finally:
         controller.hotkey.stop()
+        controller.tray.setContextMenu(None)
         controller.tray.hide()
         controller.popup.hide()
 
@@ -255,6 +256,7 @@ def test_app_controller_async_translation(qtbot, tmp_path) -> None:
         assert "Stub Translator" in controller.popup.translate_meta_label.text()
     finally:
         controller.hotkey.stop()
+        controller.tray.setContextMenu(None)
         controller.tray.hide()
         controller.popup.hide()
 
@@ -336,6 +338,7 @@ def test_vector_icons_and_tray_menu_styling(qtbot, tmp_path) -> None:
         assert any("Quit" in t for t in action_texts)
     finally:
         controller.hotkey.stop()
+        controller.tray.setContextMenu(None)
         controller.tray.hide()
         controller.popup.hide()
 
@@ -404,6 +407,33 @@ def test_result_popup_resizable_and_persists_size(qtbot) -> None:
     assert popup.width() >= popup.minimumWidth()
     assert popup.height() >= popup.minimumHeight()
     assert not popup.grab().isNull()
+
+
+def test_editorial_eink_tokens_and_responsive_layout(qtbot) -> None:
+    from ocr_snip.ui.theme import EDITORIAL_STYLESHEET, THEME
+
+    assert THEME.paper == "#F7F5F0"
+    assert THEME.sheet == "#FFFFFF"
+    assert THEME.pressed == "#EFECE4"
+    assert THEME.ink == "#1A1A18"
+    assert THEME.graphite == "#6B6963"
+    assert THEME.hairline == "#D8D4CA"
+    assert THEME.vermilion == "#C83E2B"
+    assert THEME.green == "#234E3D"
+    assert "#F7F5F0" in EDITORIAL_STYLESHEET
+    assert "#C83E2B" in EDITORIAL_STYLESHEET
+
+    popup = ResultPopup()
+    qtbot.addWidget(popup)
+    popup.show()
+
+    # Narrow -> stacked vertical; wide -> side-by-side horizontal
+    popup.resize(720, 500)
+    assert popup.panes_splitter.orientation() == Qt.Orientation.Vertical
+    popup.resize(920, 500)
+    assert popup.panes_splitter.orientation() == Qt.Orientation.Horizontal
+    assert not popup.grab().isNull()
+
 
 
 
