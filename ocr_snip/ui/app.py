@@ -32,7 +32,7 @@ from ocr_snip.ui.settings_dialog import SettingsDialog
 from ocr_snip.ui.theme import (
     EDITORIAL_STYLESHEET,
     THEME,
-    SleekProxyStyle,
+    build_editorial_palette,
     create_app_icon,
 )
 
@@ -118,9 +118,8 @@ class OCRSnippingApp(QObject):
         self.qt_app.setApplicationName(__app_name__)
         self.qt_app.setApplicationVersion(__version__)
         if not self.qt_app.property("_sleek_style_installed"):
-            sleek_style = SleekProxyStyle("Fusion")
-            setattr(self.qt_app, "_sleek_style", sleek_style)
-            self.qt_app.setStyle(sleek_style)
+            self.qt_app.setStyle("Fusion")
+            self.qt_app.setPalette(build_editorial_palette())
             self.qt_app.setProperty("_sleek_style_installed", True)
         self.qt_app.setStyleSheet(EDITORIAL_STYLESHEET)
 

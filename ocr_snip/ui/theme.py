@@ -10,18 +10,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
-from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPalette, QPen, QPixmap
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFrame,
     QHBoxLayout,
     QLabel,
-    QProxyStyle,
     QSizeGrip,
     QSpinBox,
     QStyle,
-    QStyleOption,
+    QStyleOptionButton,
     QWidget,
 )
 
@@ -625,6 +625,13 @@ QCheckBox {{
     font-size: 13px;
 }}
 
+QCheckBox::indicator {{
+    width: 15px;
+    height: 15px;
+    background: transparent;
+    border: none;
+}}
+
 /* --- Editorial Underline Tabs --- */
 QTabWidget::pane {{
     border: none;
@@ -722,82 +729,75 @@ EDITORIAL_STYLESHEET = _build_editorial_stylesheet(THEME)
 DARK_STYLESHEET = EDITORIAL_STYLESHEET
 
 
-class SleekProxyStyle(QProxyStyle):
-    """Draws crisp ink chevrons and tactile square checkboxes natively."""
+def build_editorial_palette(t: EditorialThemeTokens = THEME) -> QPalette:
+    """Build a light Editorial E-Ink QPalette for native Fusion primitives (arrows, tooltips, etc.)."""
+    pal = QPalette()
+    pal.setColor(QPalette.ColorRole.Window, QColor(t.paper))
+    pal.setColor(QPalette.ColorRole.WindowText, QColor(t.ink))
+    pal.setColor(QPalette.ColorRole.Base, QColor(t.sheet))
+    pal.setColor(QPalette.ColorRole.AlternateBase, QColor(t.paper))
+    pal.setColor(QPalette.ColorRole.Text, QColor(t.ink))
+    pal.setColor(QPalette.ColorRole.Button, QColor(t.sheet))
+    pal.setColor(QPalette.ColorRole.ButtonText, QColor(t.ink))
+    pal.setColor(QPalette.ColorRole.Highlight, QColor(t.pressed))
+    pal.setColor(QPalette.ColorRole.HighlightedText, QColor(t.ink))
+    pal.setColor(QPalette.ColorRole.PlaceholderText, QColor(t.graphite))
+    pal.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(t.disabled_ink))
+    pal.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor(t.disabled_ink))
+    pal.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor(t.disabled_ink))
+    return pal
 
-    def drawPrimitive(
-        self,
-        element: QStyle.PrimitiveElement,
-        option: QStyleOption | None,
-        painter: QPainter | None,
-        widget: QWidget | None = None,
-    ) -> None:
-        if option is not None and painter is not None:
-            if element == QStyle.PrimitiveElement.PE_IndicatorArrowDown:
-                self._draw_chevron(painter, option.rect, direction="down")
-                return
-            if element == QStyle.PrimitiveElement.PE_IndicatorArrowUp:
-                self._draw_chevron(painter, option.rect, direction="up")
-                return
-            if element == QStyle.PrimitiveElement.PE_IndicatorArrowRight:
-                self._draw_chevron(painter, option.rect, direction="right")
-                return
-            if element == QStyle.PrimitiveElement.PE_IndicatorCheckBox:
-                self._draw_checkbox(painter, option)
-                return
-        super().drawPrimitive(element, option, painter, widget)
 
-    @staticmethod
-    def _draw_chevron(painter: QPainter, rect, direction: str) -> None:
-        painter.save()
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pen = QPen(
-            QColor(THEME.ink),
-            1.4,
-            Qt.PenStyle.SolidLine,
-            Qt.PenCapStyle.RoundCap,
-            Qt.PenJoinStyle.RoundJoin,
+class SleekCheckBox(QCheckBox):
+    """QCheckBox that safely draws a crisp Editorial E-Ink square checkbox inside paintEvent."""
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        opt = QStyleOptionButton()
+        self.initStyleOption(opt)
+        indicator_rect = self.style().subElementRect(
+            QStyle.SubElement.SE_CheckBoxIndicator, opt, self
         )
-        painter.setPen(pen)
-        cx = float(rect.center().x())
-        cy = float(rect.center().y())
-        if direction == "down":
-            painter.drawPolyline([QPointF(cx - 3.5, cy - 1.5), QPointF(cx, cy + 2.0), QPointF(cx + 3.5, cy - 1.5)])
-        elif direction == "up":
-            painter.drawPolyline([QPointF(cx - 3.5, cy + 1.5), QPointF(cx, cy - 2.0), QPointF(cx + 3.5, cy + 1.5)])
-        else:
-            painter.drawPolyline([QPointF(cx - 1.5, cy - 3.5), QPointF(cx + 2.0, cy), QPointF(cx - 1.5, cy + 3.5)])
-        painter.restore()
+        if not indicator_rect.isValid():
+            return
 
-    @staticmethod
-    def _draw_checkbox(painter: QPainter, option: QStyleOption) -> None:
-        painter.save()
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        r = QRectF(option.rect).adjusted(1.5, 1.5, -1.5, -1.5)
-        checked = bool(option.state & QStyle.StateFlag.State_On)
-        hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
+        painter = QPainter(self)
+        try:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            r = QRectF(indicator_rect).adjusted(1.0, 1.0, -1.0, -1.0)
+            checked = self.isChecked()
+            hovered = bool(opt.state & QStyle.StateFlag.State_MouseOver)
+            enabled = self.isEnabled()
 
-        if checked:
-            painter.setBrush(QColor(THEME.ink))
-            painter.setPen(QPen(QColor(THEME.ink), 1.2))
-            painter.drawRoundedRect(r, 2.0, 2.0)
-            pen = QPen(
-                QColor(THEME.paper),
-                1.7,
-                Qt.PenStyle.SolidLine,
-                Qt.PenCapStyle.RoundCap,
-                Qt.PenJoinStyle.RoundJoin,
-            )
-            painter.setPen(pen)
-            cx, cy = r.center().x(), r.center().y()
-            painter.drawPolyline(
-                [QPointF(cx - 3.0, cy + 0.2), QPointF(cx - 0.8, cy + 2.6), QPointF(cx + 3.4, cy - 2.4)]
-            )
-        else:
-            painter.setBrush(QColor(THEME.pressed if hovered else THEME.sheet))
-            painter.setPen(QPen(QColor(THEME.ink), 1.1))
-            painter.drawRoundedRect(r, 2.0, 2.0)
-        painter.restore()
+            if checked:
+                fill = QColor(THEME.ink if enabled else THEME.disabled_ink)
+                painter.setBrush(fill)
+                painter.setPen(QPen(fill, 1.2))
+                painter.drawRoundedRect(r, 2.0, 2.0)
+                pen = QPen(
+                    QColor(THEME.paper),
+                    1.7,
+                    Qt.PenStyle.SolidLine,
+                    Qt.PenCapStyle.RoundCap,
+                    Qt.PenJoinStyle.RoundJoin,
+                )
+                painter.setPen(pen)
+                cx, cy = r.center().x(), r.center().y()
+                painter.drawPolyline(
+                    [
+                        QPointF(cx - 3.0, cy + 0.2),
+                        QPointF(cx - 0.8, cy + 2.6),
+                        QPointF(cx + 3.4, cy - 2.4),
+                    ]
+                )
+            else:
+                painter.setBrush(QColor(THEME.pressed if hovered else THEME.sheet))
+                border = QColor(THEME.ink if enabled else THEME.hairline)
+                painter.setPen(QPen(border, 1.1))
+                painter.drawRoundedRect(r, 2.0, 2.0)
+        finally:
+            if painter.isActive():
+                painter.end()
 
 
 def _paint_down_chevron(widget: QWidget) -> None:
