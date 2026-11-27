@@ -12,9 +12,9 @@ from ocr_snip.config import AppConfig
 
 
 def _run_cli_image(args: argparse.Namespace) -> int:
-    from PIL import Image
-
+    from ocr_snip.ai_client import close_http_client
     from ocr_snip.ocr.manager import OCRManager
+    from ocr_snip.security import safe_open_image
 
     img_path = Path(args.image)
     if not img_path.exists():
@@ -28,7 +28,11 @@ def _run_cli_image(args: argparse.Namespace) -> int:
         config.local_script = args.script
 
     manager = OCRManager(config)
-    image = Image.open(img_path).convert("RGB")
+    try:
+        image = safe_open_image(img_path)
+    except Exception as exc:
+        print(f"Error: could not open image: {exc}", file=sys.stderr)
+        return 1
     result = manager.recognize(
         image,
         force_engine=args.mode,
@@ -96,6 +100,7 @@ def _run_cli_image(args: argparse.Namespace) -> int:
             else:
                 print(f"\n[Translation error: {translation.error}]", file=sys.stderr)
 
+    close_http_client()
     return 0 if result.ok else 1
 
 

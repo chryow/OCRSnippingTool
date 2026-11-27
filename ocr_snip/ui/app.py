@@ -328,7 +328,9 @@ class OCRSnippingApp(QObject):
         if not path:
             return
         try:
-            img = Image.open(path).convert("RGB")
+            from ocr_snip.security import safe_open_image
+
+            img = safe_open_image(path)
         except Exception as exc:
             logger.warning("Could not open image %s: %s", path, exc)
             QMessageBox.warning(None, __app_name__, f"Could not open image:\n{exc}")
@@ -500,6 +502,8 @@ class OCRSnippingApp(QObject):
             self._settings_open = False
 
     def quit(self) -> None:
+        from ocr_snip.ai_client import close_http_client
+
         logger.info("Shutting down %s", __app_name__)
         self.hotkey.stop()
         if self._instance_guard is not None:
@@ -507,6 +511,7 @@ class OCRSnippingApp(QObject):
         for worker in (self._worker, self._translate_worker):
             if worker is not None and worker.isRunning():
                 worker.wait(1000)
+        close_http_client()
         if self._history_dialog is not None:
             self._history_dialog.close()
         self.tray.hide()

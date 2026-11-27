@@ -83,9 +83,12 @@ class HistoryStore:
         self._entries = loaded
 
     def save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        from ocr_snip.security import atomic_write_text
+
         payload = [asdict(entry) for entry in self._entries]
-        self.path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        atomic_write_text(
+            self.path, json.dumps(payload, indent=2, ensure_ascii=False), private=True
+        )
 
     def add(
         self,
