@@ -406,6 +406,33 @@ def test_result_popup_resizable_and_persists_size(qtbot) -> None:
     assert not popup.grab().isNull()
 
 
+def test_editorial_eink_tokens_and_responsive_layout(qtbot) -> None:
+    from ocr_snip.ui.theme import EDITORIAL_STYLESHEET, THEME
+
+    assert THEME.paper == "#F7F5F0"
+    assert THEME.sheet == "#FFFFFF"
+    assert THEME.pressed == "#EFECE4"
+    assert THEME.ink == "#1A1A18"
+    assert THEME.graphite == "#6B6963"
+    assert THEME.hairline == "#D8D4CA"
+    assert THEME.vermilion == "#C83E2B"
+    assert THEME.green == "#234E3D"
+    assert "#F7F5F0" in EDITORIAL_STYLESHEET
+    assert "#C83E2B" in EDITORIAL_STYLESHEET
+
+    popup = ResultPopup()
+    qtbot.addWidget(popup)
+    popup.show()
+
+    # Narrow -> stacked vertical; wide -> side-by-side horizontal
+    popup.resize(720, 500)
+    assert popup.panes_splitter.orientation() == Qt.Orientation.Vertical
+    popup.resize(920, 500)
+    assert popup.panes_splitter.orientation() == Qt.Orientation.Horizontal
+    assert not popup.grab().isNull()
+
+
+
 
 
 

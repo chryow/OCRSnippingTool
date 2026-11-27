@@ -22,11 +22,11 @@ from PyQt6.QtWidgets import (
 
 from ocr_snip.history import HistoryEntry, HistoryStore
 from ocr_snip.ui.icons import svg_icon
-from ocr_snip.ui.theme import apply_sleek_theme, create_app_icon
+from ocr_snip.ui.theme import THEME, apply_sleek_theme, create_app_icon, create_colophon_bar
 
 
 class HistoryDialog(QDialog):
-    """Searchable window showing past OCR extractions and translations."""
+    """Searchable Editorial E-Ink ledger showing past OCR extractions and translations."""
 
     def __init__(self, store: HistoryStore, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -48,8 +48,13 @@ class HistoryDialog(QDialog):
         self.refresh()
 
     def _build_ui(self) -> None:
-        root = QVBoxLayout(self)
-        root.setContentsMargins(16, 16, 16, 16)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        content = QWidget()
+        root = QVBoxLayout(content)
+        root.setContentsMargins(16, 16, 16, 12)
         root.setSpacing(12)
 
         # --- Top search & filter bar ---
@@ -78,6 +83,8 @@ class HistoryDialog(QDialog):
 
         # Left: entries list
         self.list_widget = QListWidget()
+        self.list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.list_widget.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.list_widget.currentRowChanged.connect(self._on_selection_changed)
         splitter.addWidget(self.list_widget)
 
@@ -107,14 +114,14 @@ class HistoryDialog(QDialog):
         )
         detail_layout.addWidget(self.detail_text, stretch=2)
 
-        self.trans_label = QLabel("Translation")
-        self.trans_label.setObjectName("MutedLabel")
+        self.trans_label = QLabel("TRANSLATED")
+        self.trans_label.setObjectName("MonoLabel")
         self.trans_label.hide()
         detail_layout.addWidget(self.trans_label)
 
         self.detail_trans = QPlainTextEdit()
         self.detail_trans.setReadOnly(True)
-        self.detail_trans.setMaximumHeight(110)
+        self.detail_trans.setMaximumHeight(130)
         self.detail_trans.hide()
         detail_layout.addWidget(self.detail_trans, stretch=1)
 
@@ -122,42 +129,38 @@ class HistoryDialog(QDialog):
         actions_row.setSpacing(8)
 
         self.pin_btn = QPushButton(" Pin")
-        self.pin_btn.setIcon(svg_icon("star", 14, "#a1a1aa"))
+        self.pin_btn.setIcon(svg_icon("star", 14, THEME.ink))
         self.pin_btn.setIconSize(QSize(14, 14))
         self.pin_btn.clicked.connect(self._toggle_pin_selected)
         actions_row.addWidget(self.pin_btn)
 
         self.delete_btn = QPushButton(" Delete")
-        self.delete_btn.setIcon(svg_icon("trash", 14, "#a1a1aa"))
+        self.delete_btn.setIcon(svg_icon("trash", 14, THEME.ink))
         self.delete_btn.setIconSize(QSize(14, 14))
         self.delete_btn.clicked.connect(self._delete_selected)
         actions_row.addWidget(self.delete_btn)
 
         actions_row.addStretch()
 
-        self.copy_trans_btn = QPushButton(" Copy Translation")
-        self.copy_trans_btn.setObjectName("TranslateButton")
-        self.copy_trans_btn.setIcon(svg_icon("copy", 14, "#d4d4d8"))
-        self.copy_trans_btn.setIconSize(QSize(14, 14))
+        self.copy_trans_btn = QPushButton("COPY TRANSLATION")
+        self.copy_trans_btn.setObjectName("AIButton")
         self.copy_trans_btn.clicked.connect(self._copy_translation)
         self.copy_trans_btn.hide()
         actions_row.addWidget(self.copy_trans_btn)
 
-        self.copy_btn = QPushButton(" Copy Text")
+        self.copy_btn = QPushButton("COPY TEXT")
         self.copy_btn.setObjectName("PrimaryButton")
-        self.copy_btn.setIcon(svg_icon("copy", 14, "#09090b"))
-        self.copy_btn.setIconSize(QSize(14, 14))
         self.copy_btn.clicked.connect(self._copy_text)
         actions_row.addWidget(self.copy_btn)
 
         detail_layout.addLayout(actions_row)
         splitter.addWidget(detail_card)
-        splitter.setSizes([310, 450])
+        splitter.setSizes([320, 540])
 
         # Bottom summary bar
         bottom = QHBoxLayout()
-        self.status_label = QLabel("0 items")
-        self.status_label.setObjectName("MutedLabel")
+        self.status_label = QLabel("0 ITEMS")
+        self.status_label.setObjectName("MonoMuted")
         bottom.addWidget(self.status_label)
         bottom.addStretch()
 
@@ -165,6 +168,11 @@ class HistoryDialog(QDialog):
         close_btn.clicked.connect(self.close)
         bottom.addWidget(close_btn)
         root.addLayout(bottom)
+
+        outer.addWidget(content, stretch=1)
+
+        colophon, _ = create_colophon_bar(left_text="LEDGER ARCHIVE", parent=self)
+        outer.addWidget(colophon)
 
     def refresh(self) -> None:
         selected_id = self._current_entry.id if self._current_entry else None
@@ -176,7 +184,7 @@ class HistoryDialog(QDialog):
         self.list_widget.clear()
         restore_row = 0
         for idx, entry in enumerate(items):
-            prefix = "Pinned · " if entry.pinned else ""
+            prefix = "PINNED · " if entry.pinned else ""
             label = f"{prefix}{entry.language}  ·  {entry.display_time}\n{entry.short_preview}"
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, entry)
@@ -188,7 +196,7 @@ class HistoryDialog(QDialog):
         total = len(self.store.entries)
         shown = len(items)
         self.status_label.setText(
-            f"Showing {shown} of {total} snips" if shown != total else f"{total} snips saved"
+            f"SHOWING {shown} OF {total} SNIPS" if shown != total else f"{total} SNIPS SAVED"
         )
 
         if items:
@@ -219,7 +227,7 @@ class HistoryDialog(QDialog):
             self.trans_label.hide()
             self.detail_trans.hide()
             self.copy_trans_btn.hide()
-            self.pin_btn.setIcon(svg_icon("star", 14, "#a1a1aa"))
+            self.pin_btn.setIcon(svg_icon("star", 14, THEME.ink))
             self.pin_btn.setText(" Pin")
             return
 
@@ -234,17 +242,17 @@ class HistoryDialog(QDialog):
 
         self.detail_text.setPlainText(entry.text)
         if entry.pinned:
-            self.pin_btn.setIcon(svg_icon("star_filled", 14, "#f4f4f5"))
+            self.pin_btn.setIcon(svg_icon("star_filled", 14, THEME.vermilion))
             self.pin_btn.setText(" Unpin")
         else:
-            self.pin_btn.setIcon(svg_icon("star", 14, "#a1a1aa"))
+            self.pin_btn.setIcon(svg_icon("star", 14, THEME.ink))
             self.pin_btn.setText(" Pin")
 
         if entry.translation:
             lbl = (
-                f"Translation ({entry.translation_lang})"
+                f"TRANSLATED · {entry.translation_lang.upper()}"
                 if entry.translation_lang
-                else "Translation"
+                else "TRANSLATED"
             )
             self.trans_label.setText(lbl)
             self.trans_label.show()
@@ -262,8 +270,7 @@ class HistoryDialog(QDialog):
         clipboard = QGuiApplication.clipboard()
         if clipboard is not None:
             clipboard.setText(self._current_entry.text)
-        self.copy_btn.setIcon(svg_icon("check", 14, "#09090b"))
-        self.copy_btn.setText(" Copied")
+        self.copy_btn.setText("COPIED")
         self._copy_reset_timer.start(1400)
 
     def _copy_translation(self) -> None:
@@ -272,15 +279,12 @@ class HistoryDialog(QDialog):
         clipboard = QGuiApplication.clipboard()
         if clipboard is not None:
             clipboard.setText(self._current_entry.translation)
-        self.copy_trans_btn.setIcon(svg_icon("check", 14, "#4ade80"))
-        self.copy_trans_btn.setText(" Copied")
+        self.copy_trans_btn.setText("COPIED")
         self._copy_reset_timer.start(1400)
 
     def _reset_copy_labels(self) -> None:
-        self.copy_btn.setIcon(svg_icon("copy", 14, "#09090b"))
-        self.copy_btn.setText(" Copy Text")
-        self.copy_trans_btn.setIcon(svg_icon("copy", 14, "#d4d4d8"))
-        self.copy_trans_btn.setText(" Copy Translation")
+        self.copy_btn.setText("COPY TEXT")
+        self.copy_trans_btn.setText("COPY TRANSLATION")
 
     def _toggle_pin_selected(self) -> None:
         if self._current_entry is None:

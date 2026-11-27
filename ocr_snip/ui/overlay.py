@@ -21,6 +21,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QWidget
 
 from ocr_snip.capture.screenshot import ScreenCapture
+from ocr_snip.ui.theme import THEME
 
 logger = logging.getLogger("ocr_snip.overlay")
 
@@ -155,8 +156,8 @@ class SnipOverlay(QWidget):
             # 1. Draw the frozen desktop screenshot scaled cleanly to widget size
             painter.drawPixmap(self.rect(), self._pixmap)
 
-            # 2. Dim the entire screen EXCEPT the selected rectangle
-            dim_color = QColor(9, 9, 11, 138)
+            # 2. Flat understated ink scrim: rgba(26, 26, 24, 0.35)
+            dim_color = QColor(*THEME.scrim_rgba)
             rect = self.selection_rect
             if self._dragging and rect.width() > 1 and rect.height() > 1:
                 path = QPainterPath()
@@ -165,27 +166,27 @@ class SnipOverlay(QWidget):
                 path.setFillRule(Qt.FillRule.OddEvenFill)
                 painter.fillPath(path, dim_color)
 
-                # Subtle dark outer contrast stroke + crisp pure-white selection frame
-                painter.setPen(QPen(QColor(0, 0, 0, 140), 3.0))
-                painter.drawRect(rect)
-                painter.setPen(QPen(QColor("#ffffff"), 1.5))
-                painter.drawRect(rect)
+                # Sharp 1.5px solid Stamp Vermilion (#C83E2B) selection border
+                border_pen = QPen(QColor(THEME.vermilion), 1.5, Qt.PenStyle.SolidLine)
+                border_pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
+                painter.setPen(border_pen)
+                painter.drawRect(QRectF(rect))
 
-                # Minimal corner handles
+                # Crisp hairline corner ticks (drafting/stationery crop marks)
                 self._draw_corner_handles(painter, rect)
 
-                # Floating dimensions pill
+                # Printed paper dimension tag near cursor
                 self._draw_dimensions_pill(painter, rect)
             else:
                 painter.fillRect(self.rect(), dim_color)
-                # Subtle hairline crosshair guides before dragging
+                # Subtle drafting hairline guides before dragging
                 if self._cursor_pos.x() >= 0:
-                    guide_pen = QPen(QColor(255, 255, 255, 38), 1.0, Qt.PenStyle.SolidLine)
+                    guide_pen = QPen(QColor(247, 245, 240, 110), 1.0, Qt.PenStyle.SolidLine)
                     painter.setPen(guide_pen)
                     painter.drawLine(0, self._cursor_pos.y(), self.width(), self._cursor_pos.y())
                     painter.drawLine(self._cursor_pos.x(), 0, self._cursor_pos.x(), self.height())
 
-            # 3. Top-center instruction pill
+            # 3. Top-center printed instruction slip
             self._draw_instruction_banner(painter)
         except Exception:
             logger.exception("SnipOverlay paint error; dismissing overlay safely")
@@ -198,46 +199,82 @@ class SnipOverlay(QWidget):
                 painter.end()
 
     def _draw_corner_handles(self, painter: QPainter, rect: QRect) -> None:
-        painter.setBrush(QColor("#ffffff"))
-        painter.setPen(QPen(QColor("#18181b"), 1.2))
-        r = 3.5
-        for pt in (rect.topLeft(), rect.topRight(), rect.bottomLeft(), rect.bottomRight()):
-            painter.drawEllipse(QPointF(pt), r, r)
+        """Draw crisp hairline drafting corner ticks outside the Vermilion selection frame."""
+        tick = 7.0
+        gap = 3.0
+        pen = QPen(QColor(THEME.vermilion), 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.SquareCap)
+        painter.setPen(pen)
+
+        left = float(rect.left())
+        right = float(rect.right())
+        top = float(rect.top())
+        bottom = float(rect.bottom())
+
+        # Top-left
+        painter.drawLine(QPointF(left - gap, top - gap), QPointF(left - gap + tick, top - gap))
+        painter.drawLine(QPointF(left - gap, top - gap), QPointF(left - gap, top - gap + tick))
+        # Top-right
+        painter.drawLine(QPointF(right + gap, top - gap), QPointF(right + gap - tick, top - gap))
+        painter.drawLine(QPointF(right + gap, top - gap), QPointF(right + gap, top - gap + tick))
+        # Bottom-left
+        painter.drawLine(QPointF(left - gap, bottom + gap), QPointF(left - gap + tick, bottom + gap))
+        painter.drawLine(QPointF(left - gap, bottom + gap), QPointF(left - gap, bottom + gap - tick))
+        # Bottom-right
+        painter.drawLine(QPointF(right + gap, bottom + gap), QPointF(right + gap - tick, bottom + gap))
+        painter.drawLine(QPointF(right + gap, bottom + gap), QPointF(right + gap, bottom + gap - tick))
 
     def _draw_dimensions_pill(self, painter: QPainter, rect: QRect) -> None:
-        label = f"{rect.width()} × {rect.height()}"
-        font = QFont("Segoe UI", 9, QFont.Weight.DemiBold)
+        """Draw a crisp printed paper coordinate/size tag near the selection."""
+        label = f"{rect.width()} × {rect.height()} PX"
+        font = QFont("Consolas", 9, QFont.Weight.DemiBold)
+        font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 0.8)
         painter.setFont(font)
         fm = painter.fontMetrics()
-        tw = fm.horizontalAdvance(label) + 16
+        tw = fm.horizontalAdvance(label) + 26
         th = fm.height() + 8
 
-        px = rect.left()
-        py = rect.top() - th - 8
+        px = float(rect.left())
+        py = float(rect.top() - th - 10)
         if py < 56:
-            py = rect.bottom() + 8
-        px = max(8, min(self.width() - tw - 8, px))
+            py = float(rect.bottom() + 10)
+        px = max(8.0, min(float(self.width() - tw - 8), px))
 
-        pill = QRectF(px, py, tw, th)
-        painter.setPen(QPen(QColor(255, 255, 255, 38), 1))
-        painter.setBrush(QColor(20, 20, 23, 230))
-        painter.drawRoundedRect(pill, 6, 6)
-        painter.setPen(QColor("#f4f4f5"))
-        painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, label)
+        tag = QRectF(px, py, float(tw), float(th))
+        painter.setPen(QPen(QColor(THEME.ink), 1.0))
+        painter.setBrush(QColor(THEME.paper))
+        painter.drawRoundedRect(tag, 2.0, 2.0)
+
+        # 5x5px Stamp Vermilion active capture square
+        sq_x = px + 8.0
+        sq_y = py + (th - 5.0) / 2.0
+        painter.fillRect(QRectF(sq_x, sq_y, 5.0, 5.0), QColor(THEME.vermilion))
+
+        text_rect = QRectF(px + 18.0, py, float(tw - 22), float(th))
+        painter.setPen(QColor(THEME.ink))
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, label)
 
     def _draw_instruction_banner(self, painter: QPainter) -> None:
-        text = "Drag to capture text  ·  Esc or Right-Click to cancel"
-        font = QFont("Segoe UI", 10, QFont.Weight.Medium)
+        """Draw a flat printed paper instruction slip at top-center."""
+        text = "DRAG TO CAPTURE  ·  ESC OR RIGHT-CLICK TO CANCEL"
+        font = QFont("Consolas", 9, QFont.Weight.DemiBold)
+        font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 0.9)
         painter.setFont(font)
         fm = painter.fontMetrics()
-        tw = fm.horizontalAdvance(text) + 32
+        tw = fm.horizontalAdvance(text) + 34
         th = fm.height() + 14
 
-        bx = (self.width() - tw) / 2
-        by = 20
-        banner = QRectF(bx, by, tw, th)
-        painter.setPen(QPen(QColor(255, 255, 255, 34), 1))
-        painter.setBrush(QColor(20, 20, 23, 230))
-        painter.drawRoundedRect(banner, th / 2, th / 2)
-        painter.setPen(QColor("#f4f4f5"))
-        painter.drawText(banner, Qt.AlignmentFlag.AlignCenter, text)
+        bx = (self.width() - tw) / 2.0
+        by = 18.0
+        banner = QRectF(bx, by, float(tw), float(th))
+        painter.setPen(QPen(QColor(THEME.ink), 1.0))
+        painter.setBrush(QColor(THEME.paper))
+        painter.drawRoundedRect(banner, 2.0, 2.0)
+
+        # 5x5px Stamp Vermilion square
+        sq_x = bx + 11.0
+        sq_y = by + (th - 5.0) / 2.0
+        painter.fillRect(QRectF(sq_x, sq_y, 5.0, 5.0), QColor(THEME.vermilion))
+
+        text_rect = QRectF(bx + 22.0, by, float(tw - 28), float(th))
+        painter.setPen(QColor(THEME.ink))
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)

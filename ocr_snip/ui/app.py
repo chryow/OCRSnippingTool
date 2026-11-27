@@ -29,7 +29,12 @@ from ocr_snip.ui.icons import svg_icon
 from ocr_snip.ui.overlay import SnipOverlay
 from ocr_snip.ui.result_popup import ResultPopup
 from ocr_snip.ui.settings_dialog import SettingsDialog
-from ocr_snip.ui.theme import DARK_STYLESHEET, SleekProxyStyle, create_app_icon
+from ocr_snip.ui.theme import (
+    EDITORIAL_STYLESHEET,
+    THEME,
+    SleekProxyStyle,
+    create_app_icon,
+)
 
 logger = logging.getLogger("ocr_snip.app")
 
@@ -115,7 +120,7 @@ class OCRSnippingApp(QObject):
         if not self.qt_app.property("_sleek_style_installed"):
             self.qt_app.setStyle(SleekProxyStyle())
             self.qt_app.setProperty("_sleek_style_installed", True)
-        self.qt_app.setStyleSheet(DARK_STYLESHEET)
+        self.qt_app.setStyleSheet(EDITORIAL_STYLESHEET)
 
         self.icon = create_app_icon(64)
         self.qt_app.setWindowIcon(self.icon)
@@ -162,7 +167,7 @@ class OCRSnippingApp(QObject):
 
     @staticmethod
     def _configure_menu(menu: QMenu) -> None:
-        menu.setStyleSheet(DARK_STYLESHEET)
+        menu.setStyleSheet(EDITORIAL_STYLESHEET)
         menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         menu.setWindowFlags(
             menu.windowFlags()
@@ -174,12 +179,12 @@ class OCRSnippingApp(QObject):
         self._tray_menu = QMenu()
         self._configure_menu(self._tray_menu)
 
-        self.snip_action = QAction(svg_icon("snip", 15, "#e4e4e7"), "New Snip", self)
+        self.snip_action = QAction(svg_icon("snip", 15, THEME.vermilion), "New Snip", self)
         self.snip_action.triggered.connect(self.start_snip)
         self._tray_menu.addAction(self.snip_action)
 
         self._delay_menu = QMenu("Delayed Snip", self._tray_menu)
-        self._delay_menu.setIcon(svg_icon("timer", 15, "#a1a1aa"))
+        self._delay_menu.setIcon(svg_icon("timer", 15, THEME.ink))
         self._configure_menu(self._delay_menu)
 
         delay3_action = QAction("In 3 seconds", self._delay_menu)
@@ -193,25 +198,25 @@ class OCRSnippingApp(QObject):
 
         self._tray_menu.addSeparator()
 
-        clip_action = QAction(svg_icon("clipboard", 15, "#a1a1aa"), "From Clipboard", self)
+        clip_action = QAction(svg_icon("clipboard", 15, THEME.ink), "From Clipboard", self)
         clip_action.triggered.connect(self.ocr_from_clipboard)
         self._tray_menu.addAction(clip_action)
 
-        file_action = QAction(svg_icon("image", 15, "#a1a1aa"), "From Image File...", self)
+        file_action = QAction(svg_icon("image", 15, THEME.ink), "From Image File...", self)
         file_action.triggered.connect(self.ocr_from_file)
         self._tray_menu.addAction(file_action)
 
-        history_action = QAction(svg_icon("history", 15, "#a1a1aa"), "History", self)
+        history_action = QAction(svg_icon("history", 15, THEME.ink), "History", self)
         history_action.triggered.connect(self.open_history)
         self._tray_menu.addAction(history_action)
 
         self._tray_menu.addSeparator()
 
-        settings_action = QAction(svg_icon("settings", 15, "#a1a1aa"), "Settings", self)
+        settings_action = QAction(svg_icon("settings", 15, THEME.ink), "Settings", self)
         settings_action.triggered.connect(self.open_settings)
         self._tray_menu.addAction(settings_action)
 
-        quit_action = QAction(svg_icon("quit", 15, "#a1a1aa"), "Quit", self)
+        quit_action = QAction(svg_icon("quit", 15, THEME.ink), "Quit", self)
         quit_action.triggered.connect(self.quit)
         self._tray_menu.addAction(quit_action)
 
@@ -234,6 +239,7 @@ class OCRSnippingApp(QObject):
         ok = self.hotkey.start(self.config.hotkey)
         pretty = format_hotkey_display(self.config.hotkey)
         self.snip_action.setText(f"New Snip\t{pretty}")
+        self.popup.set_hotkey_hint(pretty)
         if ok:
             self.tray.setToolTip(f"{__app_name__} ({pretty})")
         else:

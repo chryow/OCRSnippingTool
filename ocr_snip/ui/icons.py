@@ -176,15 +176,22 @@ def _render_icon_pixmap(name: str, size: int, color: str, scale: int = 2) -> QPi
     elif name == "chevron_down":
         painter.drawPolyline([QPointF(4.2, 6.2), QPointF(8.0, 10.0), QPointF(11.8, 6.2)])
 
+    elif name == "swap":
+        # Crisp horizontal swap arrows (⇄)
+        painter.drawLine(QPointF(3.0, 5.5), QPointF(13.0, 5.5))
+        painter.drawPolyline([QPointF(10.5, 3.2), QPointF(13.0, 5.5), QPointF(10.5, 7.8)])
+        painter.drawLine(QPointF(13.0, 10.5), QPointF(3.0, 10.5))
+        painter.drawPolyline([QPointF(5.5, 8.2), QPointF(3.0, 10.5), QPointF(5.5, 12.8)])
+
     painter.end()
     return pixmap
 
 
 @lru_cache(maxsize=128)
-def svg_icon(name: str, size: int = 16, color: str = "#a1a1aa") -> QIcon:
-    """Return a cached crisp monochrome vector QIcon."""
+def svg_icon(name: str, size: int = 16, color: str = "#1A1A18") -> QIcon:
+    """Return a cached crisp monochrome vector QIcon tuned for Editorial E-Ink surfaces."""
     icon = QIcon()
     icon.addPixmap(_render_icon_pixmap(name, size, color), QIcon.Mode.Normal, QIcon.State.Off)
-    icon.addPixmap(_render_icon_pixmap(name, size, "#f4f4f5"), QIcon.Mode.Active, QIcon.State.Off)
-    icon.addPixmap(_render_icon_pixmap(name, size, "#52525b"), QIcon.Mode.Disabled, QIcon.State.Off)
+    icon.addPixmap(_render_icon_pixmap(name, size, color), QIcon.Mode.Active, QIcon.State.Off)
+    icon.addPixmap(_render_icon_pixmap(name, size, "#B5B1A7"), QIcon.Mode.Disabled, QIcon.State.Off)
     return icon

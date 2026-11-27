@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ocr_snip import __version__
 from ocr_snip.capture.hotkey import format_hotkey_display
 from ocr_snip.config import DEFAULT_GEMINI_MODEL, RECOMMENDED_GEMINI_MODELS, AppConfig
 from ocr_snip.logging_utils import get_logs_dir
@@ -35,11 +36,13 @@ from ocr_snip.ocr.vision_ai import AI_OUTPUT_FORMATS
 from ocr_snip.translate import TARGET_LANGUAGES
 from ocr_snip.ui.icons import svg_icon
 from ocr_snip.ui.theme import (
+    THEME,
     SleekComboBox,
     SleekDoubleSpinBox,
     SleekSpinBox,
     apply_sleek_theme,
     create_app_icon,
+    create_colophon_bar,
 )
 
 
@@ -78,15 +81,20 @@ class SettingsDialog(QDialog):
 
         self.setWindowTitle("Settings")
         self.setWindowIcon(create_app_icon(64))
-        self.setMinimumSize(680, 520)
-        self.resize(740, 580)
+        self.setMinimumSize(680, 540)
+        self.resize(740, 600)
         self._build_ui()
         apply_sleek_theme(self)
         self._load_from_config()
 
     def _build_ui(self) -> None:
-        root = QVBoxLayout(self)
-        root.setContentsMargins(16, 16, 16, 16)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        content = QWidget()
+        root = QVBoxLayout(content)
+        root.setContentsMargins(18, 16, 18, 14)
         root.setSpacing(12)
 
         self.tabs = QTabWidget()
@@ -98,18 +106,26 @@ class SettingsDialog(QDialog):
         self._build_vision_ai_tab()
 
         btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
         btn_row.addStretch()
 
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)
         btn_row.addWidget(cancel_btn)
 
-        save_btn = QPushButton("Save Settings")
+        save_btn = QPushButton("SAVE SETTINGS")
         save_btn.setObjectName("PrimaryButton")
         save_btn.clicked.connect(self._on_save)
         btn_row.addWidget(save_btn)
 
         root.addLayout(btn_row)
+        outer.addWidget(content, stretch=1)
+
+        colophon, _ = create_colophon_bar(
+            left_text=f"OCRSNIPPINGTOOL V{__version__}",
+            parent=self,
+        )
+        outer.addWidget(colophon)
 
     def _build_general_tab(self) -> None:
         tab = QWidget()
@@ -169,7 +185,7 @@ class SettingsDialog(QDialog):
 
         diag_row = QHBoxLayout()
         logs_btn = QPushButton(" Open Logs Folder")
-        logs_btn.setIcon(svg_icon("folder", 14, "#a1a1aa"))
+        logs_btn.setIcon(svg_icon("folder", 14, THEME.ink))
         logs_btn.setIconSize(QSize(14, 14))
         logs_btn.setToolTip("Open diagnostic log directory")
         logs_btn.clicked.connect(
@@ -180,7 +196,7 @@ class SettingsDialog(QDialog):
         layout.addLayout(diag_row)
 
         layout.addStretch()
-        self.tabs.addTab(tab, "General")
+        self.tabs.addTab(tab, "GENERAL")
 
     def _build_ocr_tab(self) -> None:
         tab = QWidget()
@@ -244,7 +260,7 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(trans_group)
         layout.addStretch()
-        self.tabs.addTab(tab, "OCR && Translate")
+        self.tabs.addTab(tab, "OCR && TRANSLATE")
 
     def _build_language_packs_tab(self) -> None:
         tab = QWidget()
@@ -317,7 +333,7 @@ class SettingsDialog(QDialog):
         scroll.setWidget(scroll_body)
         layout.addWidget(scroll, stretch=1)
 
-        self.tabs.addTab(tab, "Language Packs")
+        self.tabs.addTab(tab, "LANGUAGE PACKS")
         self.refresh_language_packs()
 
     def refresh_language_packs(self) -> None:
@@ -445,7 +461,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(self.ollama_group)
 
         layout.addStretch()
-        self.tabs.addTab(tab, "Vision AI")
+        self.tabs.addTab(tab, "VISION AI")
 
     def _make_secret_row(self, placeholder: str) -> tuple[QWidget, QLineEdit]:
         container = QWidget()
@@ -460,7 +476,7 @@ class SettingsDialog(QDialog):
 
         toggle_btn = QPushButton()
         toggle_btn.setObjectName("IconButton")
-        toggle_btn.setIcon(svg_icon("eye", 15, "#a1a1aa"))
+        toggle_btn.setIcon(svg_icon("eye", 15, THEME.ink))
         toggle_btn.setIconSize(QSize(15, 15))
         toggle_btn.setFixedSize(28, 28)
         toggle_btn.setCheckable(True)

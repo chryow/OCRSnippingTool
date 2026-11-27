@@ -1,12 +1,22 @@
-"""Minimalist neutral-graphite stylesheet, crisp vector app/tray icons, and custom Qt style."""
+"""Editorial E-Ink design system — centralized color/font tokens, QSS, and crisp native widgets.
+
+Aesthetic: printed ledger / Japanese stationery / tactile e-reader.
+- Zero gradients, zero blur/glassmorphism, zero heavy drop shadows, zero pill buttons.
+- Crisp 2px–3px corners, hairline 1px dividers, high-contrast ink on unbleached paper.
+"""
 
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
     QProxyStyle,
     QSizeGrip,
     QSpinBox,
@@ -15,517 +25,705 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-DARK_STYLESHEET = """
-QWidget {
-    color: #e4e4e7;
-    font-family: "Segoe UI Variable", "Segoe UI", "SF Pro Text", "Inter", "Helvetica Neue", Arial, sans-serif;
-    font-size: 14px;
-}
 
-QToolTip {
-    background-color: #202024;
-    color: #f4f4f5;
-    border: 1px solid #35353d;
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 12.5px;
-}
+@dataclass(frozen=True)
+class EditorialThemeTokens:
+    """Centralized Editorial E-Ink color, border, and typography tokens."""
+
+    # Core paper & ink palette
+    paper: str = "#F7F5F0"           # Window Background (Unbleached Paper)
+    sheet: str = "#FFFFFF"           # Text Box / Card Surface (Crisp Sheet)
+    pressed: str = "#EFECE4"         # Hover / Subtle Tint (Pressed Paper)
+    ink: str = "#1A1A18"             # Primary Text / Strong Active Border (Rich Ink)
+    graphite: str = "#6B6963"        # Muted Text / Metadata (Graphite)
+    hairline: str = "#D8D4CA"        # Hairline Borders & Dividers
+    vermilion: str = "#C83E2B"       # Primary Accent (Stamp Vermilion)
+    vermilion_hover: str = "#AE3423" # Hover deepen for solid Vermilion CTA
+    vermilion_tint: str = "#FBF2EF"  # Flat paper tint for warning/error slips
+    green: str = "#234E3D"           # Success Accent (Fountain Pen Green)
+    green_tint: str = "#EFF5F2"      # Flat subtle tint for confirmed states
+    disabled_ink: str = "#A8A49B"    # Disabled text on paper
+
+    # Scrim (rgba(26, 26, 24, 0.35))
+    scrim_rgba: tuple[int, int, int, int] = (26, 26, 24, 89)
+
+    # Typography stacks
+    font_serif: str = '"Newsreader", "Georgia", "Times New Roman", serif'
+    font_sans: str = (
+        '"Inter", "Segoe UI Variable", "Segoe UI", "Noto Sans", '
+        '"PingFang SC", "Yu Gothic UI", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif'
+    )
+    font_mono: str = '"JetBrains Mono", "Cascadia Mono", "Consolas", "SF Mono", monospace'
+
+    # Editorial colophon credit
+    colophon_credit: str = "CRAFTED BY WILSON"
+
+
+THEME = EditorialThemeTokens()
+
+
+def _build_editorial_stylesheet(t: EditorialThemeTokens = THEME) -> str:
+    return f"""
+QWidget {{
+    color: {t.ink};
+    font-family: {t.font_sans};
+    font-size: 13.5px;
+}}
+
+QToolTip {{
+    background-color: {t.paper};
+    color: {t.ink};
+    border: 1px solid {t.ink};
+    border-radius: 2px;
+    padding: 5px 8px;
+    font-family: {t.font_mono};
+    font-size: 11px;
+}}
 
 /* --- System Tray & Context Menus --- */
-QMenu {
-    background-color: #18181b;
-    color: #e4e4e7;
-    border: 1px solid #303038;
-    border-radius: 9px;
-    padding: 6px;
-    font-size: 13.5px;
-}
+QMenu {{
+    background-color: {t.paper};
+    color: {t.ink};
+    border: 1px solid {t.ink};
+    border-radius: 3px;
+    padding: 4px;
+    font-family: {t.font_sans};
+    font-size: 13px;
+}}
 
-QMenu::item {
+QMenu::item {{
     background-color: transparent;
-    color: #e4e4e7;
-    padding: 8px 26px 8px 12px;
-    border-radius: 6px;
-    margin: 1px 2px;
-}
+    color: {t.ink};
+    padding: 7px 26px 7px 10px;
+    border-radius: 2px;
+    margin: 1px 0px;
+}}
 
-QMenu::item:selected {
-    background-color: #27272d;
-    color: #ffffff;
-}
+QMenu::item:selected {{
+    background-color: {t.pressed};
+    color: {t.ink};
+}}
 
-QMenu::item:disabled {
-    color: #52525b;
-}
+QMenu::item:disabled {{
+    color: {t.disabled_ink};
+}}
 
-QMenu::separator {
+QMenu::separator {{
     height: 1px;
-    background-color: #27272c;
-    margin: 5px 8px;
-}
+    background-color: {t.hairline};
+    margin: 4px 6px;
+}}
 
-QMenu::icon {
+QMenu::icon {{
     padding-left: 4px;
-}
+}}
 
 /* --- Main Containers --- */
-QDialog, QFrame#PopupCard {
-    background-color: #18181b;
-    border: 1px solid #2d2d34;
-    border-radius: 12px;
-}
+QDialog {{
+    background-color: {t.paper};
+    color: {t.ink};
+}}
 
-QFrame#HeaderBar {
-    background-color: #141417;
-    border-top-left-radius: 11px;
-    border-top-right-radius: 11px;
-    border-bottom: 1px solid #242429;
-}
+QFrame#PopupCard {{
+    background-color: {t.paper};
+    border: 1px solid {t.ink};
+    border-radius: 3px;
+}}
 
-QFrame#UtilityStrip {
-    background-color: #141417;
-    border-bottom-left-radius: 11px;
-    border-bottom-right-radius: 11px;
-    border-top: 1px solid #242429;
-}
+QFrame#HeaderBar {{
+    background-color: {t.paper};
+    border-bottom: 1px solid {t.hairline};
+    border-top-left-radius: 2px;
+    border-top-right-radius: 2px;
+}}
 
-QFrame#TranslatePanel {
-    background-color: #141417;
-    border: 1px solid #27272d;
-    border-radius: 9px;
-}
+QFrame#LangBar {{
+    background-color: {t.paper};
+    border-bottom: 1px solid {t.hairline};
+}}
 
-QFrame#PackCard {
-    background-color: #141417;
-    border: 1px solid #26262d;
-    border-radius: 8px;
-}
+QFrame#UtilityStrip, QFrame#ColophonBar {{
+    background-color: {t.paper};
+    border-top: 1px solid {t.hairline};
+    border-bottom-left-radius: 2px;
+    border-bottom-right-radius: 2px;
+}}
 
-QFrame#PackCard:hover {
-    border-color: #3a3a43;
-}
+QFrame#SheetPane, QFrame#TranslatePanel {{
+    background-color: {t.sheet};
+    border: 1px solid {t.hairline};
+    border-radius: 2px;
+}}
 
-QWidget#ScrollBody {
+QFrame#PaneHeader {{
+    background-color: {t.paper};
+    border-bottom: 1px solid {t.hairline};
+}}
+
+QFrame#StatusSlip {{
+    background-color: {t.paper};
+    border: 1px solid {t.ink};
+    border-radius: 2px;
+}}
+
+QFrame#PackCard {{
+    background-color: {t.sheet};
+    border: 1px solid {t.hairline};
+    border-radius: 3px;
+}}
+
+QFrame#PackCard:hover {{
+    border-color: {t.ink};
+}}
+
+QWidget#ScrollBody {{
     background-color: transparent;
-}
+}}
 
-/* --- Typography & Subtle Badges --- */
-QLabel#TitleLabel {
-    font-size: 14px;
+/* --- Editorial Typography --- */
+QLabel#TitleLabel {{
+    font-family: {t.font_serif};
+    font-size: 16px;
+    font-weight: 700;
+    color: {t.ink};
+    letter-spacing: 0.2px;
+}}
+
+QLabel#SectionSerif {{
+    font-family: {t.font_serif};
+    font-size: 15px;
+    font-weight: 700;
+    color: {t.ink};
+}}
+
+QLabel#MonoLabel {{
+    font-family: {t.font_mono};
+    font-size: 10.5px;
     font-weight: 600;
-    color: #f4f4f5;
-    letter-spacing: -0.1px;
-}
+    color: {t.ink};
+    letter-spacing: 0.9px;
+}}
 
-QLabel#PackTitle {
-    font-size: 13.5px;
-    font-weight: 600;
-    color: #f4f4f5;
-}
-
-QLabel#PackDesc {
-    font-size: 12.5px;
-    color: #9898a3;
-}
-
-QLabel#PackStatusInstalled {
-    font-size: 12.5px;
-    font-weight: 600;
-    color: #4ade80;
-}
-
-QLabel#PackStatusAvailable {
-    font-size: 12.5px;
-    color: #7c7c88;
-}
-
-QLabel#LangPill {
-    background-color: #232328;
-    border: 1px solid #32323a;
-    color: #f4f4f5;
-    border-radius: 6px;
-    padding: 3px 9px;
-    font-size: 12.5px;
+QLabel#MonoMuted {{
+    font-family: {t.font_mono};
+    font-size: 10.5px;
     font-weight: 500;
-}
+    color: {t.graphite};
+    letter-spacing: 0.7px;
+}}
 
-QLabel#EnginePill {
+QLabel#PackTitle {{
+    font-family: {t.font_serif};
+    font-size: 14px;
+    font-weight: 700;
+    color: {t.ink};
+}}
+
+QLabel#PackDesc {{
+    font-size: 12.5px;
+    color: {t.graphite};
+}}
+
+QLabel#PackStatusInstalled {{
+    font-family: {t.font_mono};
+    font-size: 10.5px;
+    font-weight: 700;
+    color: {t.green};
+    letter-spacing: 0.7px;
+}}
+
+QLabel#PackStatusAvailable {{
+    font-family: {t.font_mono};
+    font-size: 10.5px;
+    color: {t.graphite};
+    letter-spacing: 0.6px;
+}}
+
+QLabel#LangPill {{
+    background-color: {t.sheet};
+    border: 1px solid {t.hairline};
+    color: {t.ink};
+    border-radius: 2px;
+    padding: 4px 9px;
+    font-family: {t.font_mono};
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+}}
+
+QLabel#EnginePill {{
     background-color: transparent;
     border: none;
-    color: #9898a3;
+    color: {t.graphite};
     padding: 2px 4px;
-    font-size: 12.5px;
-}
+    font-family: {t.font_mono};
+    font-size: 10.5px;
+    letter-spacing: 0.5px;
+}}
 
-QLabel#CopiedPill {
-    background-color: rgba(34, 197, 94, 0.14);
-    border: 1px solid rgba(74, 222, 128, 0.28);
-    color: #4ade80;
-    border-radius: 6px;
-    padding: 2px 9px;
+QLabel#CopiedPill {{
+    background-color: {t.paper};
+    border: 1px solid {t.ink};
+    color: {t.green};
+    border-radius: 2px;
+    padding: 2px 8px;
+    font-family: {t.font_mono};
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.9px;
+}}
+
+QLabel#WarnPill {{
+    background-color: {t.vermilion_tint};
+    border: 1px solid {t.vermilion};
+    color: {t.vermilion};
+    border-radius: 2px;
+    padding: 6px 10px;
+    font-family: {t.font_mono};
+    font-size: 11px;
+    letter-spacing: 0.3px;
+}}
+
+QLabel#MutedLabel {{
+    color: {t.graphite};
     font-size: 12px;
-    font-weight: 600;
-}
+}}
 
-QLabel#WarnPill {
-    background-color: rgba(217, 119, 6, 0.12);
-    border: 1px solid rgba(245, 158, 11, 0.30);
-    color: #fbbf24;
-    border-radius: 8px;
-    padding: 7px 11px;
-    font-size: 13px;
-}
-
-QLabel#MutedLabel {
-    color: #9898a3;
-    font-size: 12.5px;
-}
-
-/* --- Text Inputs & Lists --- */
-QPlainTextEdit {
-    background-color: #111113;
-    border: 1px solid #28282f;
-    border-radius: 8px;
+/* --- Text Inputs & Sheets --- */
+QPlainTextEdit {{
+    background-color: {t.sheet};
+    border: 1px solid {t.hairline};
+    border-radius: 2px;
     padding: 11px 12px;
-    color: #f4f4f5;
-    font-size: 15px;
-    selection-background-color: #3f3f46;
-    selection-color: #ffffff;
-}
+    color: {t.ink};
+    font-family: {t.font_sans};
+    font-size: 14.5px;
+    selection-background-color: {t.pressed};
+    selection-color: {t.ink};
+}}
 
-QPlainTextEdit:focus {
-    border: 1px solid #52525b;
-}
+QPlainTextEdit:focus {{
+    border: 1px solid {t.ink};
+}}
 
-QListWidget {
-    background-color: #111113;
-    border: 1px solid #28282f;
-    border-radius: 8px;
-    padding: 5px;
+QPlainTextEdit#SheetEdit {{
+    background-color: {t.sheet};
+    border: none;
+    border-radius: 0px;
+    padding: 12px 14px;
+    color: {t.ink};
+    font-family: {t.font_sans};
+    font-size: 14.5px;
+    selection-background-color: {t.pressed};
+    selection-color: {t.ink};
+}}
+
+QListWidget {{
+    background-color: {t.sheet};
+    border: 1px solid {t.hairline};
+    border-radius: 2px;
+    padding: 4px;
     outline: none;
-    font-size: 13.5px;
-}
+    font-size: 13px;
+}}
 
-QListWidget::item {
-    padding: 9px 11px;
-    border-radius: 6px;
-    margin-bottom: 2px;
-    color: #d4d4d8;
-}
+QListWidget::item {{
+    padding: 9px 10px;
+    border-bottom: 1px solid {t.hairline};
+    border-radius: 2px;
+    color: {t.ink};
+}}
 
-QListWidget::item:selected {
-    background-color: #27272d;
-    color: #ffffff;
-}
+QListWidget::item:selected {{
+    background-color: {t.pressed};
+    color: {t.ink};
+    border-left: 2px solid {t.vermilion};
+}}
 
-QListWidget::item:hover:!selected {
-    background-color: #1c1c21;
-}
+QListWidget::item:hover:!selected {{
+    background-color: {t.paper};
+}}
 
-QSplitter::handle {
+QSplitter::handle {{
     background-color: transparent;
     width: 8px;
-}
+    height: 8px;
+}}
 
-/* --- Buttons --- */
-QPushButton {
-    background-color: #222227;
-    border: 1px solid #32323a;
-    border-radius: 7px;
-    padding: 7px 13px;
-    color: #e4e4e7;
+/* --- Buttons (Crisp 2px–3px Rectangular Ledger Style) --- */
+QPushButton {{
+    background-color: {t.sheet};
+    border: 1px solid {t.ink};
+    border-radius: 2px;
+    padding: 6px 12px;
+    color: {t.ink};
+    font-family: {t.font_sans};
     font-weight: 500;
-    font-size: 13.5px;
-}
+    font-size: 13px;
+}}
 
-QPushButton:hover {
-    background-color: #2c2c33;
-    border-color: #464652;
-    color: #ffffff;
-}
+QPushButton:hover {{
+    background-color: {t.pressed};
+    color: {t.ink};
+}}
 
-QPushButton:pressed {
-    background-color: #1c1c21;
-}
+QPushButton:pressed {{
+    background-color: {t.hairline};
+}}
 
-QPushButton:disabled {
-    color: #52525b;
-    background-color: #19191d;
-    border-color: #242429;
-}
+QPushButton:disabled {{
+    color: {t.disabled_ink};
+    background-color: {t.paper};
+    border-color: {t.hairline};
+}}
 
-QPushButton#PrimaryButton {
-    background-color: #f4f4f5;
-    border: 1px solid #f4f4f5;
-    color: #09090b;
+/* Primary Ink CTA (Translate / Save Settings) */
+QPushButton#PrimaryButton, QPushButton#TranslateButton {{
+    background-color: {t.ink};
+    border: 1px solid {t.ink};
+    border-radius: 2px;
+    color: {t.paper};
+    font-family: {t.font_mono};
+    font-size: 11px;
     font-weight: 600;
-    padding: 7px 16px;
-}
+    letter-spacing: 0.8px;
+    padding: 7px 14px;
+}}
 
-QPushButton#PrimaryButton:hover {
-    background-color: #ffffff;
-    border-color: #ffffff;
-    color: #09090b;
-}
+QPushButton#PrimaryButton:hover, QPushButton#TranslateButton:hover {{
+    background-color: #2E2E2B;
+    border-color: #2E2E2B;
+    color: {t.paper};
+}}
 
-QPushButton#PrimaryButton:pressed {
-    background-color: #d4d4d8;
-    border-color: #d4d4d8;
-}
+QPushButton#PrimaryButton:pressed, QPushButton#TranslateButton:pressed {{
+    background-color: #0E0E0D;
+}}
 
-QPushButton#PrimaryButton:disabled {
-    background-color: #27272c;
-    border-color: #2e2e34;
-    color: #52525b;
-}
+QPushButton#PrimaryButton:disabled, QPushButton#TranslateButton:disabled {{
+    background-color: {t.hairline};
+    border-color: {t.hairline};
+    color: {t.graphite};
+}}
 
-QPushButton#AIButton, QPushButton#TranslateButton {
-    background-color: #222227;
-    border: 1px solid #32323a;
-    color: #e4e4e7;
-    font-weight: 500;
-}
+/* Stamp Vermilion Primary Capture CTA (Re-Snip) */
+QPushButton#CaptureButton {{
+    background-color: {t.vermilion};
+    border: 1px solid {t.vermilion};
+    border-radius: 2px;
+    color: {t.paper};
+    font-family: {t.font_mono};
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.9px;
+    padding: 5px 11px;
+}}
 
-QPushButton#AIButton:hover, QPushButton#TranslateButton:hover {
-    background-color: #2c2c33;
-    border-color: #484852;
-    color: #ffffff;
-}
+QPushButton#CaptureButton:hover {{
+    background-color: {t.vermilion_hover};
+    border-color: {t.vermilion_hover};
+    color: {t.paper};
+}}
 
-QPushButton#IconButton {
+QPushButton#CaptureButton:pressed {{
+    background-color: #932B1C;
+}}
+
+/* Secondary bordered action (Enhance / Copy / Swap) */
+QPushButton#AIButton, QPushButton#SwapButton {{
+    background-color: {t.sheet};
+    border: 1px solid {t.ink};
+    border-radius: 2px;
+    color: {t.ink};
+    font-family: {t.font_mono};
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.7px;
+    padding: 6px 11px;
+}}
+
+QPushButton#AIButton:hover, QPushButton#SwapButton:hover {{
+    background-color: {t.pressed};
+}}
+
+QPushButton#SwapButton {{
+    padding: 4px 8px;
+    font-size: 13px;
+}}
+
+/* Inline Pane [ COPY ] button */
+QPushButton#PaneCopyButton {{
+    background-color: {t.sheet};
+    border: 1px solid {t.ink};
+    border-radius: 2px;
+    color: {t.ink};
+    font-family: {t.font_mono};
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    padding: 3px 9px;
+}}
+
+QPushButton#PaneCopyButton:hover {{
+    background-color: {t.pressed};
+}}
+
+QPushButton#PaneCopyButton:disabled {{
+    background-color: {t.paper};
+    border-color: {t.hairline};
+    color: {t.disabled_ink};
+}}
+
+/* Quiet utility header buttons */
+QPushButton#IconButton {{
     background-color: transparent;
     border: 1px solid transparent;
-    border-radius: 6px;
-    padding: 5px 8px;
-    color: #a1a1aa;
-    font-size: 13px;
-}
+    border-radius: 2px;
+    padding: 4px 7px;
+    color: {t.ink};
+    font-family: {t.font_mono};
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+}}
 
-QPushButton#IconButton:hover {
-    background-color: #26262c;
-    color: #f4f4f5;
-}
+QPushButton#IconButton:hover {{
+    background-color: {t.pressed};
+    border-color: {t.hairline};
+    color: {t.ink};
+}}
 
-QPushButton#IconButton:checked {
-    background-color: #2c2c33;
-    border-color: #3f3f48;
-    color: #f4f4f5;
-}
+QPushButton#IconButton:checked {{
+    background-color: {t.pressed};
+    border-color: {t.ink};
+    color: {t.ink};
+}}
 
 /* --- Form Controls --- */
-QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {
-    background-color: #111113;
-    border: 1px solid #2b2b32;
-    border-radius: 7px;
-    padding: 6px 11px;
-    color: #f4f4f5;
-    font-size: 13.5px;
-}
+QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {{
+    background-color: {t.sheet};
+    border: 1px solid {t.hairline};
+    border-radius: 2px;
+    padding: 5px 10px;
+    color: {t.ink};
+    font-size: 13px;
+}}
 
-QComboBox {
+QComboBox {{
     padding-right: 26px;
     margin-right: 2px;
-}
+}}
 
-QComboBox#CompactCombo {
-    padding: 4px 24px 4px 9px;
-    font-size: 12.5px;
-    border-radius: 6px;
-    background-color: #1b1b20;
-    border-color: #292930;
-    color: #d4d4d8;
-}
+QComboBox#CompactCombo {{
+    padding: 3px 22px 3px 8px;
+    font-family: {t.font_mono};
+    font-size: 10.5px;
+    border-radius: 2px;
+    background-color: {t.sheet};
+    border: 1px solid {t.hairline};
+    color: {t.ink};
+}}
 
-QComboBox:hover, QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover {
-    border-color: #3f3f48;
-}
+QComboBox:hover, QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover {{
+    border-color: {t.graphite};
+}}
 
-QComboBox:focus, QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
-    border-color: #71717a;
-}
+QComboBox:focus, QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
+    border-color: {t.ink};
+}}
 
-QComboBox::drop-down {
+QComboBox::drop-down {{
     subcontrol-origin: padding;
     subcontrol-position: top right;
     width: 24px;
     border: none;
     background: transparent;
-}
+}}
 
-QComboBox::down-arrow {
+QComboBox::down-arrow {{
     image: none;
     width: 0px;
     height: 0px;
-}
+}}
 
 QSpinBox::up-button, QDoubleSpinBox::up-button,
-QSpinBox::down-button, QDoubleSpinBox::down-button {
+QSpinBox::down-button, QDoubleSpinBox::down-button {{
     subcontrol-origin: border;
     width: 22px;
     border: none;
     background: transparent;
-}
+}}
 
 QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
-QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
-    background-color: #26262c;
-    border-radius: 3px;
-}
+QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {{
+    background-color: {t.pressed};
+}}
 
 QSpinBox::up-arrow, QDoubleSpinBox::up-arrow,
-QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
     image: none;
     width: 0px;
     height: 0px;
-}
+}}
 
-QComboBox QAbstractItemView {
-    background-color: #18181b;
-    border: 1px solid #32323a;
-    border-radius: 7px;
-    selection-background-color: #2c2c34;
-    selection-color: #ffffff;
-    color: #e4e4e7;
-    padding: 4px;
+QComboBox QAbstractItemView {{
+    background-color: {t.sheet};
+    border: 1px solid {t.ink};
+    border-radius: 2px;
+    selection-background-color: {t.pressed};
+    selection-color: {t.ink};
+    color: {t.ink};
+    padding: 3px;
     outline: none;
-    font-size: 13.5px;
-}
+    font-size: 13px;
+}}
 
-QComboBox QAbstractItemView::item {
-    min-height: 28px;
+QComboBox QAbstractItemView::item {{
+    min-height: 26px;
     padding: 4px 10px;
-    border-radius: 5px;
-}
+    border-radius: 2px;
+}}
 
-QGroupBox {
-    background-color: #141417;
-    border: 1px solid #25252b;
-    border-radius: 9px;
+/* --- Ledger Section Cards (QGroupBox) --- */
+QGroupBox {{
+    background-color: {t.sheet};
+    border: 1px solid {t.hairline};
+    border-radius: 3px;
     margin-top: 16px;
     padding: 16px 14px 14px 14px;
-    font-weight: 600;
-    color: #d4d4d8;
-}
+    font-family: {t.font_serif};
+    font-size: 14px;
+    font-weight: 700;
+    color: {t.ink};
+}}
 
-QGroupBox::title {
+QGroupBox::title {{
     subcontrol-origin: margin;
-    left: 12px;
+    left: 10px;
     top: 2px;
     padding: 0 6px;
-    background-color: #18181b;
-    color: #a1a1aa;
-    font-size: 12.5px;
-    font-weight: 600;
-}
+    background-color: {t.paper};
+    color: {t.ink};
+    font-family: {t.font_serif};
+    font-size: 14px;
+    font-weight: 700;
+}}
 
-QProgressBar {
-    background-color: #222227;
+QProgressBar {{
+    background-color: {t.hairline};
     border: none;
     height: 2px;
-}
+}}
 
-QProgressBar::chunk {
-    background-color: #e4e4e7;
-}
+QProgressBar::chunk {{
+    background-color: {t.vermilion};
+}}
 
-QCheckBox {
+QCheckBox {{
     spacing: 9px;
-    color: #e4e4e7;
-    font-size: 13.5px;
-}
+    color: {t.ink};
+    font-size: 13px;
+}}
 
-/* --- Minimal Underline Tabs --- */
-QTabWidget::pane {
+/* --- Editorial Underline Tabs --- */
+QTabWidget::pane {{
     border: none;
-    border-top: 1px solid #26262c;
+    border-top: 1px solid {t.hairline};
     background-color: transparent;
-    padding-top: 12px;
-}
+    padding-top: 10px;
+}}
 
-QTabBar::tab {
+QTabBar::tab {{
     background-color: transparent;
     border: none;
     border-bottom: 2px solid transparent;
-    padding: 9px 16px;
+    padding: 8px 16px;
     margin-right: 4px;
-    color: #8e8e98;
-    font-weight: 500;
-    font-size: 13.5px;
-}
-
-QTabBar::tab:hover {
-    color: #e4e4e7;
-}
-
-QTabBar::tab:selected {
-    color: #ffffff;
-    border-bottom: 2px solid #f4f4f5;
+    color: {t.graphite};
+    font-family: {t.font_mono};
+    font-size: 11px;
     font-weight: 600;
-}
+    letter-spacing: 0.7px;
+}}
 
-QScrollArea {
+QTabBar::tab:hover {{
+    color: {t.ink};
+}}
+
+QTabBar::tab:selected {{
+    color: {t.ink};
+    border-bottom: 2px solid {t.vermilion};
+    font-weight: 700;
+}}
+
+QScrollArea {{
     background-color: transparent;
     border: none;
-}
+}}
 
-QScrollArea > QWidget > QWidget {
+QScrollArea > QWidget > QWidget {{
     background-color: transparent;
-}
+}}
 
-QScrollBar:vertical {
+QScrollBar:vertical {{
     background: transparent;
     width: 8px;
     margin: 2px 0;
-}
+}}
 
-QScrollBar::handle:vertical {
-    background: #32323a;
-    border-radius: 4px;
+QScrollBar::handle:vertical {{
+    background: {t.hairline};
+    border-radius: 2px;
     min-height: 28px;
-}
+}}
 
-QScrollBar::handle:vertical:hover {
-    background: #4b4b56;
-}
+QScrollBar::handle:vertical:hover {{
+    background: {t.graphite};
+}}
 
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
-QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
     background: transparent;
     height: 0;
-}
+}}
 
-QScrollBar:horizontal {
+QScrollBar:horizontal {{
     background: transparent;
     height: 8px;
     margin: 0 2px;
-}
+}}
 
-QScrollBar::handle:horizontal {
-    background: #32323a;
-    border-radius: 4px;
+QScrollBar::handle:horizontal {{
+    background: {t.hairline};
+    border-radius: 2px;
     min-width: 28px;
-}
+}}
 
-QScrollBar::handle:horizontal:hover {
-    background: #4b4b56;
-}
+QScrollBar::handle:horizontal:hover {{
+    background: {t.graphite};
+}}
 
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal,
-QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
     background: transparent;
     width: 0;
-}
+}}
 
-QSizeGrip {
+QSizeGrip {{
     background: transparent;
     width: 14px;
     height: 14px;
-}
+}}
 """
 
 
+EDITORIAL_STYLESHEET = _build_editorial_stylesheet(THEME)
+# Backwards-compatible alias for existing imports/tests
+DARK_STYLESHEET = EDITORIAL_STYLESHEET
+
+
 class SleekProxyStyle(QProxyStyle):
-    """Draws crisp anti-aliased dropdown chevrons and modern checkboxes natively."""
+    """Draws crisp ink chevrons and tactile square checkboxes natively."""
 
     def drawPrimitive(
         self,
@@ -554,15 +752,15 @@ class SleekProxyStyle(QProxyStyle):
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         pen = QPen(
-            QColor("#a1a1aa"),
-            1.5,
+            QColor(THEME.ink),
+            1.4,
             Qt.PenStyle.SolidLine,
             Qt.PenCapStyle.RoundCap,
             Qt.PenJoinStyle.RoundJoin,
         )
         painter.setPen(pen)
-        cx = rect.center().x()
-        cy = rect.center().y()
+        cx = float(rect.center().x())
+        cy = float(rect.center().y())
         if direction == "down":
             painter.drawPolyline([QPointF(cx - 3.5, cy - 1.5), QPointF(cx, cy + 2.0), QPointF(cx + 3.5, cy - 1.5)])
         elif direction == "up":
@@ -575,17 +773,17 @@ class SleekProxyStyle(QProxyStyle):
     def _draw_checkbox(painter: QPainter, option: QStyleOption) -> None:
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        r = QRectF(option.rect).adjusted(1.0, 1.0, -1.0, -1.0)
+        r = QRectF(option.rect).adjusted(1.5, 1.5, -1.5, -1.5)
         checked = bool(option.state & QStyle.StateFlag.State_On)
         hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
 
         if checked:
-            painter.setBrush(QColor("#f4f4f5"))
-            painter.setPen(QPen(QColor("#f4f4f5"), 1.2))
-            painter.drawRoundedRect(r, 4.0, 4.0)
+            painter.setBrush(QColor(THEME.ink))
+            painter.setPen(QPen(QColor(THEME.ink), 1.2))
+            painter.drawRoundedRect(r, 2.0, 2.0)
             pen = QPen(
-                QColor("#09090b"),
-                1.8,
+                QColor(THEME.paper),
+                1.7,
                 Qt.PenStyle.SolidLine,
                 Qt.PenCapStyle.RoundCap,
                 Qt.PenJoinStyle.RoundJoin,
@@ -593,12 +791,12 @@ class SleekProxyStyle(QProxyStyle):
             painter.setPen(pen)
             cx, cy = r.center().x(), r.center().y()
             painter.drawPolyline(
-                [QPointF(cx - 3.2, cy + 0.2), QPointF(cx - 0.8, cy + 2.7), QPointF(cx + 3.6, cy - 2.5)]
+                [QPointF(cx - 3.0, cy + 0.2), QPointF(cx - 0.8, cy + 2.6), QPointF(cx + 3.4, cy - 2.4)]
             )
         else:
-            painter.setBrush(QColor("#111113"))
-            painter.setPen(QPen(QColor("#52525b" if hovered else "#3a3a43"), 1.2))
-            painter.drawRoundedRect(r, 4.0, 4.0)
+            painter.setBrush(QColor(THEME.pressed if hovered else THEME.sheet))
+            painter.setPen(QPen(QColor(THEME.ink), 1.1))
+            painter.drawRoundedRect(r, 2.0, 2.0)
         painter.restore()
 
 
@@ -606,7 +804,7 @@ def _paint_down_chevron(widget: QWidget) -> None:
     painter = QPainter(widget)
     try:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        color = QColor("#8e8e98" if widget.isEnabled() else "#52525b")
+        color = QColor(THEME.ink if widget.isEnabled() else THEME.disabled_ink)
         pen = QPen(color, 1.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
         painter.setPen(pen)
         cx = widget.width() - 12.5
@@ -623,7 +821,7 @@ def _paint_spin_chevrons(widget: QWidget) -> None:
     painter = QPainter(widget)
     try:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        color = QColor("#8e8e98" if widget.isEnabled() else "#52525b")
+        color = QColor(THEME.ink if widget.isEnabled() else THEME.disabled_ink)
         pen = QPen(color, 1.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
         painter.setPen(pen)
         cx = widget.width() - 10.5
@@ -641,7 +839,7 @@ def _paint_spin_chevrons(widget: QWidget) -> None:
 
 
 class SleekComboBox(QComboBox):
-    """QComboBox that safely draws a crisp anti-aliased chevron inside paintEvent."""
+    """QComboBox that safely draws a crisp ink chevron inside paintEvent."""
 
     def paintEvent(self, event) -> None:
         super().paintEvent(event)
@@ -649,7 +847,7 @@ class SleekComboBox(QComboBox):
 
 
 class SleekSpinBox(QSpinBox):
-    """QSpinBox that safely draws crisp anti-aliased up/down chevrons inside paintEvent."""
+    """QSpinBox that safely draws crisp ink up/down chevrons inside paintEvent."""
 
     def paintEvent(self, event) -> None:
         super().paintEvent(event)
@@ -657,7 +855,7 @@ class SleekSpinBox(QSpinBox):
 
 
 class SleekDoubleSpinBox(QDoubleSpinBox):
-    """QDoubleSpinBox that safely draws crisp anti-aliased up/down chevrons inside paintEvent."""
+    """QDoubleSpinBox that safely draws crisp ink up/down chevrons inside paintEvent."""
 
     def paintEvent(self, event) -> None:
         super().paintEvent(event)
@@ -665,13 +863,13 @@ class SleekDoubleSpinBox(QDoubleSpinBox):
 
 
 class SleekSizeGrip(QSizeGrip):
-    """Minimalist bottom-right resize grip with two subtle diagonal lines."""
+    """Minimalist bottom-right resize grip with two crisp graphite diagonal ticks."""
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         try:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            pen = QPen(QColor("#52525b"), 1.3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+            pen = QPen(QColor(THEME.graphite), 1.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.SquareCap)
             painter.setPen(pen)
             w, h = float(self.width()), float(self.height())
             painter.drawLine(QPointF(w - 3.5, h - 9.5), QPointF(w - 9.5, h - 3.5))
@@ -681,34 +879,109 @@ class SleekSizeGrip(QSizeGrip):
                 painter.end()
 
 
+def make_accent_square(color: str = THEME.vermilion, size: int = 5) -> QFrame:
+    """Create a crisp 5x5px flat square status/colophon mark."""
+    sq = QFrame()
+    sq.setFixedSize(size, size)
+    sq.setStyleSheet(f"background-color: {color}; border: none; border-radius: 0px;")
+    return sq
+
+
+class StatusSlip(QFrame):
+    """Compact printed slip toast/badge with a 5x5px colored square indicator."""
+
+    def __init__(self, text: str = "", accent: str = THEME.green, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("StatusSlip")
+        row = QHBoxLayout(self)
+        row.setContentsMargins(7, 3, 8, 3)
+        row.setSpacing(6)
+
+        self._square = make_accent_square(accent, 5)
+        row.addWidget(self._square)
+
+        self._label = QLabel(text)
+        self._label.setObjectName("MonoLabel")
+        row.addWidget(self._label)
+
+    def set_status(self, text: str, accent: str = THEME.green) -> None:
+        self._square.setStyleSheet(f"background-color: {accent}; border: none; border-radius: 0px;")
+        self._label.setText(text)
+        self._label.setStyleSheet(f"color: {THEME.ink};")
+
+    def text(self) -> str:
+        return self._label.text()
+
+    def setText(self, text: str) -> None:  # noqa: N802 (Qt compatibility)
+        self._label.setText(text)
+
+
+def create_colophon_bar(
+    left_widget: QWidget | None = None,
+    *,
+    left_text: str = "",
+    parent: QWidget | None = None,
+    include_size_grip: bool = False,
+) -> tuple[QFrame, QLabel | None]:
+    """Build the slim editorial footer strip with left hint and right author colophon."""
+    bar = QFrame(parent)
+    bar.setObjectName("ColophonBar")
+    layout = QHBoxLayout(bar)
+    layout.setContentsMargins(14, 7, 10 if include_size_grip else 14, 7)
+    layout.setSpacing(8)
+
+    left_label: QLabel | None = None
+    if left_widget is not None:
+        layout.addWidget(left_widget)
+    if left_text:
+        left_label = QLabel(left_text)
+        left_label.setObjectName("MonoMuted")
+        layout.addWidget(left_label)
+
+    layout.addStretch()
+
+    credit = QLabel(THEME.colophon_credit)
+    credit.setObjectName("MonoMuted")
+    layout.addWidget(credit)
+
+    layout.addWidget(make_accent_square(THEME.vermilion, 5))
+
+    if include_size_grip and parent is not None:
+        grip = SleekSizeGrip(parent)
+        grip.setToolTip("Drag corner or any window edge to resize")
+        layout.addWidget(grip, alignment=Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignRight)
+
+    return bar, left_label
+
+
 def apply_sleek_theme(root: QWidget) -> None:
-    """Apply the unified minimalist stylesheet to `root`."""
-    root.setStyleSheet(DARK_STYLESHEET)
+    """Apply the unified Editorial E-Ink stylesheet to `root`."""
+    root.setStyleSheet(EDITORIAL_STYLESHEET)
 
 
 def create_app_icon(size: int = 64) -> QIcon:
-    """Render a minimal monochrome graphite & white OCR viewfinder app icon."""
+    """Render an Editorial E-Ink stationery stamp icon (paper tile, ink serif 'A', vermilion crop ticks)."""
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
 
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    # Sleek charcoal tile with crisp hairline border (no neon gradients)
-    painter.setBrush(QColor("#18181b"))
-    painter.setPen(QPen(QColor("#3f3f46"), max(1.2, size * 0.03)))
-    radius = size * 0.24
-    inset = max(1.5, size * 0.035)
+    # Unbleached paper stamp tile with crisp ink outline
+    inset = max(1.5, size * 0.04)
+    painter.setBrush(QColor(THEME.paper))
+    painter.setPen(QPen(QColor(THEME.ink), max(1.5, size * 0.045)))
+    radius = max(2.0, size * 0.08)
     painter.drawRoundedRect(QRectF(inset, inset, size - inset * 2, size - inset * 2), radius, radius)
 
-    # Crisp white crop viewfinder corners
-    pen = QPen(QColor("#f4f4f5"))
-    pen.setWidthF(max(2.0, size * 0.065))
-    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    # Stamp Vermilion corner crop ticks
+    pen = QPen(QColor(THEME.vermilion))
+    pen.setWidthF(max(1.8, size * 0.06))
+    pen.setCapStyle(Qt.PenCapStyle.SquareCap)
     painter.setPen(pen)
 
-    m = size * 0.20
-    arm = size * 0.16
+    m = size * 0.18
+    arm = size * 0.15
     painter.drawLine(QPointF(m, m), QPointF(m + arm, m))
     painter.drawLine(QPointF(m, m), QPointF(m, m + arm))
     painter.drawLine(QPointF(size - m, m), QPointF(size - m - arm, m))
@@ -718,9 +991,10 @@ def create_app_icon(size: int = 64) -> QIcon:
     painter.drawLine(QPointF(size - m, size - m), QPointF(size - m - arm, size - m))
     painter.drawLine(QPointF(size - m, size - m), QPointF(size - m, size - m - arm))
 
-    font = QFont("Segoe UI", max(8, int(size * 0.34)), QFont.Weight.DemiBold)
+    # Rich ink serif letter 'A'
+    font = QFont("Georgia", max(9, int(size * 0.36)), QFont.Weight.Bold)
     painter.setFont(font)
-    painter.setPen(QColor("#ffffff"))
+    painter.setPen(QColor(THEME.ink))
     painter.drawText(QRectF(0, 0, size, size), Qt.AlignmentFlag.AlignCenter, "A")
 
     painter.end()
