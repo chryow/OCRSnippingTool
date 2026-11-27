@@ -10,7 +10,6 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
-    QDoubleSpinBox,
     QFormLayout,
     QFrame,
     QGroupBox,
@@ -19,7 +18,6 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollArea,
-    QSpinBox,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -36,7 +34,13 @@ from ocr_snip.ocr.local_rapidocr import (
 from ocr_snip.ocr.vision_ai import AI_OUTPUT_FORMATS
 from ocr_snip.translate import TARGET_LANGUAGES
 from ocr_snip.ui.icons import svg_icon
-from ocr_snip.ui.theme import apply_sleek_theme, create_app_icon
+from ocr_snip.ui.theme import (
+    SleekComboBox,
+    SleekDoubleSpinBox,
+    SleekSpinBox,
+    apply_sleek_theme,
+    create_app_icon,
+)
 
 
 class PackDownloadWorker(QThread):
@@ -154,7 +158,7 @@ class SettingsDialog(QDialog):
         wf_layout.addWidget(self.preserve_breaks_cb)
 
         timer_form = QFormLayout()
-        self.auto_close_spin = QSpinBox()
+        self.auto_close_spin = SleekSpinBox()
         self.auto_close_spin.setRange(0, 120)
         self.auto_close_spin.setSuffix(" s  (0 = stay open)")
         timer_form.addRow("Auto-close popup:", self.auto_close_spin)
@@ -185,13 +189,13 @@ class SettingsDialog(QDialog):
         mode_group = QGroupBox("OCR Engine")
         form = QFormLayout(mode_group)
 
-        self.mode_combo = QComboBox()
+        self.mode_combo = SleekComboBox()
         self.mode_combo.addItem("Hybrid — Offline OCR + AI fallback", "hybrid")
         self.mode_combo.addItem("Offline Only — 100% local OCR", "local")
         self.mode_combo.addItem("Vision AI Only — Cloud or Ollama", "vision_ai")
         form.addRow("Mode:", self.mode_combo)
 
-        self.script_combo = QComboBox()
+        self.script_combo = SleekComboBox()
         for key, profile in SCRIPT_PROFILES.items():
             self.script_combo.addItem(profile.label, key)
         form.addRow("Default offline script:", self.script_combo)
@@ -201,7 +205,7 @@ class SettingsDialog(QDialog):
         )
         form.addRow(self.auto_probe_cb)
 
-        self.threshold_spin = QDoubleSpinBox()
+        self.threshold_spin = SleekDoubleSpinBox()
         self.threshold_spin.setRange(0.10, 0.99)
         self.threshold_spin.setSingleStep(0.05)
         self.threshold_spin.setDecimals(2)
@@ -211,7 +215,7 @@ class SettingsDialog(QDialog):
         )
         form.addRow("AI fallback threshold:", self.threshold_spin)
 
-        self.ai_format_combo = QComboBox()
+        self.ai_format_combo = SleekComboBox()
         for code, label in AI_OUTPUT_FORMATS:
             self.ai_format_combo.addItem(label, code)
         form.addRow("Default Vision AI format:", self.ai_format_combo)
@@ -221,12 +225,12 @@ class SettingsDialog(QDialog):
         trans_group = QGroupBox("Translation")
         t_form = QFormLayout(trans_group)
 
-        self.translate_lang_combo = QComboBox()
+        self.translate_lang_combo = SleekComboBox()
         for code, name in TARGET_LANGUAGES:
             self.translate_lang_combo.addItem(name, code)
         t_form.addRow("Default target language:", self.translate_lang_combo)
 
-        self.translate_provider_combo = QComboBox()
+        self.translate_provider_combo = SleekComboBox()
         self.translate_provider_combo.addItem("Auto (AI if configured, else Free Web)", "auto")
         self.translate_provider_combo.addItem("Free Web Translate (no API key)", "google_free")
         self.translate_provider_combo.addItem("Configured AI Provider only", "ai")
@@ -372,7 +376,7 @@ class SettingsDialog(QDialog):
         provider_group = QGroupBox("Provider")
         form = QFormLayout(provider_group)
 
-        self.provider_combo = QComboBox()
+        self.provider_combo = SleekComboBox()
         self.provider_combo.addItem("Google Gemini", "gemini")
         self.provider_combo.addItem("OpenAI / Compatible API", "openai")
         self.provider_combo.addItem("Ollama (Local)", "ollama")
@@ -392,7 +396,7 @@ class SettingsDialog(QDialog):
         )
         self.gemini_key_edit.textChanged.connect(self._update_provider_fields)
         g_form.addRow("API Key:", gemini_key_row)
-        self.gemini_model_combo = QComboBox()
+        self.gemini_model_combo = SleekComboBox()
         self.gemini_model_combo.setEditable(True)
         for model_id in RECOMMENDED_GEMINI_MODELS:
             self.gemini_model_combo.addItem(model_id)
