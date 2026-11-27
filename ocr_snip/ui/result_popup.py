@@ -439,6 +439,8 @@ class ResultPopup(QWidget):
         card_layout.addWidget(utility)
 
     def _sync_pane_orientation(self) -> None:
+        if not hasattr(self, "panes_splitter"):
+            return
         desired = (
             Qt.Orientation.Horizontal
             if self.width() >= self._SIDE_BY_SIDE_WIDTH
@@ -876,6 +878,10 @@ class ResultPopup(QWidget):
         self._sync_pane_orientation()
         if self.isVisible():
             self._resize_save_timer.start(400)
+
+    def hideEvent(self, event) -> None:
+        self._resize_save_timer.stop()
+        super().hideEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent | None) -> None:
         if event and event.key() == Qt.Key.Key_Escape:

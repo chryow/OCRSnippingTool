@@ -130,6 +130,7 @@ def test_app_controller_end_to_end_capture_to_clipboard_and_popup(qtbot, tmp_pat
         assert store.entries[0].text == "こんにちは世界"
     finally:
         controller.hotkey.stop()
+        controller.tray.setContextMenu(None)
         controller.tray.hide()
         controller.popup.hide()
 
@@ -255,6 +256,7 @@ def test_app_controller_async_translation(qtbot, tmp_path) -> None:
         assert "Stub Translator" in controller.popup.translate_meta_label.text()
     finally:
         controller.hotkey.stop()
+        controller.tray.setContextMenu(None)
         controller.tray.hide()
         controller.popup.hide()
 
@@ -336,6 +338,7 @@ def test_vector_icons_and_tray_menu_styling(qtbot, tmp_path) -> None:
         assert any("Quit" in t for t in action_texts)
     finally:
         controller.hotkey.stop()
+        controller.tray.setContextMenu(None)
         controller.tray.hide()
         controller.popup.hide()
 

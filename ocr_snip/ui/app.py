@@ -118,7 +118,9 @@ class OCRSnippingApp(QObject):
         self.qt_app.setApplicationName(__app_name__)
         self.qt_app.setApplicationVersion(__version__)
         if not self.qt_app.property("_sleek_style_installed"):
-            self.qt_app.setStyle(SleekProxyStyle())
+            sleek_style = SleekProxyStyle("Fusion")
+            setattr(self.qt_app, "_sleek_style", sleek_style)
+            self.qt_app.setStyle(sleek_style)
             self.qt_app.setProperty("_sleek_style_installed", True)
         self.qt_app.setStyleSheet(EDITORIAL_STYLESHEET)
 
@@ -547,6 +549,7 @@ class OCRSnippingApp(QObject):
         close_http_client()
         if self._history_dialog is not None:
             self._history_dialog.close()
+        self.tray.setContextMenu(None)
         self.tray.hide()
         self.qt_app.quit()
 
