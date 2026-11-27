@@ -269,13 +269,19 @@ def language_name(code: str) -> str:
     return code.upper() if code else "Unknown"
 
 
+_LANGDETECT_FN = None
+
+
 def _detect_with_langdetect(text: str) -> list[tuple[str, float]]:
     """Run statistical language detection safely; returns [(lang_code, prob), ...]."""
+    global _LANGDETECT_FN
     try:
-        from langdetect import DetectorFactory, LangDetectException, detect_langs
+        if _LANGDETECT_FN is None:
+            from langdetect import DetectorFactory, detect_langs
 
-        DetectorFactory.seed = 0
-        preds = detect_langs(text)
+            DetectorFactory.seed = 0
+            _LANGDETECT_FN = detect_langs
+        preds = _LANGDETECT_FN(text)
         return [(p.lang.lower(), float(p.prob)) for p in preds]
     except Exception:
         return []

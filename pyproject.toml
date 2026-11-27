@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ocr-snipping-tool"
-version = "1.2.0"
+version = "1.2.1"
 description = "Snipping Tool that extracts multilingual text from your screen using Hybrid AI/ML OCR."
 readme = "README.md"
 requires-python = ">=3.10"

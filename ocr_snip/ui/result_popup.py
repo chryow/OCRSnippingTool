@@ -1,9 +1,9 @@
-"""Sleek floating preview & quick-edit popup for extracted OCR text."""
+"""Sleek floating preview, edit & 1-click translation popup for extracted OCR text."""
 
 from __future__ import annotations
 
 from PyQt6.QtCore import QPoint, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QGuiApplication, QKeyEvent, QMouseEvent
+from PyQt6.QtGui import QColor, QGuiApplication, QKeyEvent, QKeySequence, QMouseEvent, QShortcut
 from PyQt6.QtWidgets import (
     QComboBox,
     QFrame,
@@ -43,6 +43,7 @@ class ResultPopup(QWidget):
         self._updating_combo = False
         self._updating_target_combo = False
         self._raw_ocr_text: str = ""
+
         self._auto_close_timer = QTimer(self)
         self._auto_close_timer.setSingleShot(True)
         self._auto_close_timer.timeout.connect(self._on_auto_close)
@@ -57,6 +58,7 @@ class ResultPopup(QWidget):
 
         self._setup_window()
         self._build_ui()
+        self._bind_shortcuts()
 
     def _setup_window(self) -> None:
         self.setWindowFlags(
@@ -67,8 +69,13 @@ class ResultPopup(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMinimumWidth(520)
         self.setMaximumWidth(700)
-        self.resize(560, 400)
+        self.resize(560, 390)
         self.setStyleSheet(DARK_STYLESHEET)
+
+    def _bind_shortcuts(self) -> None:
+        QShortcut(QKeySequence("Ctrl+Shift+C"), self, activated=self.copy_current_text)
+        QShortcut(QKeySequence("Ctrl+T"), self, activated=self._on_translate_clicked)
+        QShortcut(QKeySequence("Ctrl+N"), self, activated=self.new_snip_requested.emit)
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
@@ -77,9 +84,9 @@ class ResultPopup(QWidget):
         self.card = QFrame()
         self.card.setObjectName("PopupCard")
         shadow = QGraphicsDropShadowEffect(self.card)
-        shadow.setBlurRadius(28)
-        shadow.setOffset(0, 8)
-        shadow.setColor(QColor(0, 0, 0, 150))
+        shadow.setBlurRadius(30)
+        shadow.setOffset(0, 10)
+        shadow.setColor(QColor(0, 0, 0, 165))
         self.card.setGraphicsEffect(shadow)
         outer.addWidget(self.card)
 
@@ -87,18 +94,18 @@ class ResultPopup(QWidget):
         card_layout.setContentsMargins(0, 0, 0, 0)
         card_layout.setSpacing(0)
 
-        # --- Header bar (draggable) ---
+        # --- 1. Draggable Header Bar ---
         self.header = QFrame()
         self.header.setObjectName("HeaderBar")
         header_layout = QHBoxLayout(self.header)
         header_layout.setContentsMargins(14, 9, 10, 9)
-        header_layout.setSpacing(8)
+        header_layout.setSpacing(6)
 
         self.title_label = QLabel("OCRSnippingTool")
         self.title_label.setObjectName("TitleLabel")
         header_layout.addWidget(self.title_label)
 
-        self.copied_badge = QLabel("✓ Copied")
+        self.copied_badge = QLabel("✓ Auto-copied")
         self.copied_badge.setObjectName("CopiedPill")
         self.copied_badge.hide()
         header_layout.addWidget(self.copied_badge)
@@ -107,7 +114,7 @@ class ResultPopup(QWidget):
 
         self.snip_btn = QPushButton("✂ Snip")
         self.snip_btn.setObjectName("IconButton")
-        self.snip_btn.setToolTip("Capture a new region")
+        self.snip_btn.setToolTip("Capture a new region (Ctrl+N)")
         self.snip_btn.clicked.connect(self.new_snip_requested.emit)
         header_layout.addWidget(self.snip_btn)
 
@@ -121,25 +128,25 @@ class ResultPopup(QWidget):
         self.pin_btn.setObjectName("IconButton")
         self.pin_btn.setCheckable(True)
         self.pin_btn.setChecked(True)
-        self.pin_btn.setToolTip("Keep popup on top")
+        self.pin_btn.setToolTip("Keep floating popup on top")
         self.pin_btn.toggled.connect(self._toggle_pin)
         header_layout.addWidget(self.pin_btn)
 
         self.settings_btn = QPushButton("⚙")
         self.settings_btn.setObjectName("IconButton")
-        self.settings_btn.setToolTip("Settings")
+        self.settings_btn.setToolTip("Settings & Language Packs")
         self.settings_btn.clicked.connect(self.settings_requested.emit)
         header_layout.addWidget(self.settings_btn)
 
         self.close_btn = QPushButton("✕")
         self.close_btn.setObjectName("IconButton")
-        self.close_btn.setToolTip("Close (Esc)")
+        self.close_btn.setToolTip("Close popup (Esc)")
         self.close_btn.clicked.connect(self.hide)
         header_layout.addWidget(self.close_btn)
 
         card_layout.addWidget(self.header)
 
-        # --- Progress bar (visible while extracting) ---
+        # --- Progress Bar ---
         self.progress = QProgressBar()
         self.progress.setRange(0, 0)
         self.progress.setTextVisible(False)
@@ -147,13 +154,13 @@ class ResultPopup(QWidget):
         self.progress.hide()
         card_layout.addWidget(self.progress)
 
-        # --- Body ---
+        # --- 2. Main Body ---
         body = QWidget()
         body_layout = QVBoxLayout(body)
-        body_layout.setContentsMargins(14, 12, 14, 14)
+        body_layout.setContentsMargins(14, 12, 14, 12)
         body_layout.setSpacing(10)
 
-        # Metadata pills row
+        # Metadata strip
         meta_row = QHBoxLayout()
         meta_row.setSpacing(6)
 
@@ -181,20 +188,20 @@ class ResultPopup(QWidget):
 
         body_layout.addLayout(meta_row)
 
-        # Optional note / error pill
+        # Optional status / fallback banner
         self.note_label = QLabel("")
         self.note_label.setObjectName("WarnPill")
         self.note_label.setWordWrap(True)
         self.note_label.hide()
         body_layout.addWidget(self.note_label)
 
-        # Editable text box
+        # Main editable text area
         self.text_edit = QPlainTextEdit()
         self.text_edit.setPlaceholderText("Extracted text will appear here...")
         self.text_edit.textChanged.connect(self._update_counts)
         body_layout.addWidget(self.text_edit, stretch=1)
 
-        # --- Collapsible Translation Panel ---
+        # Collapsible Translation Drawer (hidden until needed)
         self.translate_panel = QFrame()
         self.translate_panel.setObjectName("TranslatePanel")
         tp_layout = QVBoxLayout(self.translate_panel)
@@ -215,78 +222,84 @@ class ResultPopup(QWidget):
 
         self.hide_trans_btn = QPushButton("✕")
         self.hide_trans_btn.setObjectName("IconButton")
-        self.hide_trans_btn.setToolTip("Hide translation")
+        self.hide_trans_btn.setToolTip("Hide translation panel")
         self.hide_trans_btn.clicked.connect(self.translate_panel.hide)
         tp_header.addWidget(self.hide_trans_btn)
         tp_layout.addLayout(tp_header)
 
         self.translated_edit = QPlainTextEdit()
-        self.translated_edit.setMaximumHeight(120)
+        self.translated_edit.setMaximumHeight(115)
         self.translated_edit.setPlaceholderText("Translating...")
         tp_layout.addWidget(self.translated_edit)
 
         self.translate_panel.hide()
         body_layout.addWidget(self.translate_panel)
 
-        # --- Translation Action Row ---
-        trans_row = QHBoxLayout()
-        trans_row.setSpacing(8)
-
-        trans_label = QLabel("Translate to:")
-        trans_label.setObjectName("MutedLabel")
-        trans_row.addWidget(trans_label)
+        # Single crisp Primary Action Bar: Translate | AI Enhance | Copy
+        actions_row = QHBoxLayout()
+        actions_row.setSpacing(6)
 
         self.target_lang_combo = QComboBox()
-        self.target_lang_combo.setToolTip("Select target language for 1-click translation")
+        self.target_lang_combo.setToolTip("Target language for 1-click translation")
+        self.target_lang_combo.setMinimumWidth(115)
         for code, name in TARGET_LANGUAGES:
             self.target_lang_combo.addItem(name, userData=code)
         self.target_lang_combo.currentIndexChanged.connect(self._on_target_lang_changed)
-        trans_row.addWidget(self.target_lang_combo, stretch=1)
+        actions_row.addWidget(self.target_lang_combo, stretch=1)
 
         self.translate_btn = QPushButton("🌐 Translate")
         self.translate_btn.setObjectName("TranslateButton")
-        self.translate_btn.setToolTip("Translate the extracted text into the selected language")
+        self.translate_btn.setToolTip("Translate extracted text (Ctrl+T)")
         self.translate_btn.clicked.connect(self._on_translate_clicked)
-        trans_row.addWidget(self.translate_btn)
-
-        body_layout.addLayout(trans_row)
-
-        # Bottom controls row
-        footer = QHBoxLayout()
-        footer.setSpacing(6)
-
-        self.script_combo = QComboBox()
-        self.script_combo.setToolTip("Re-scan this snip with a specific offline script model")
-        for key, profile in SCRIPT_PROFILES.items():
-            self.script_combo.addItem(profile.label, userData=key)
-        self.script_combo.currentIndexChanged.connect(self._on_script_changed)
-        footer.addWidget(self.script_combo, stretch=1)
+        actions_row.addWidget(self.translate_btn)
 
         self.ai_format_combo = QComboBox()
-        self.ai_format_combo.setToolTip("Vision AI output format (Plain Text, Markdown Tables, or Math LaTeX)")
+        self.ai_format_combo.setToolTip("Vision AI output format (Text, Markdown Tables, or Math LaTeX)")
         for code, label in AI_OUTPUT_FORMATS:
             self.ai_format_combo.addItem(label, userData=code)
-        footer.addWidget(self.ai_format_combo)
+        actions_row.addWidget(self.ai_format_combo)
 
         self.ai_btn = QPushButton("✨ AI")
         self.ai_btn.setObjectName("AIButton")
-        self.ai_btn.setToolTip("Re-extract using Vision AI in the selected format")
+        self.ai_btn.setToolTip("Re-extract this snip with Vision AI in the selected format")
         self.ai_btn.clicked.connect(self._on_enhance_ai_clicked)
-        footer.addWidget(self.ai_btn)
+        actions_row.addWidget(self.ai_btn)
 
         self.copy_btn = QPushButton("Copy")
         self.copy_btn.setObjectName("PrimaryButton")
+        self.copy_btn.setToolTip("Copy text to clipboard (Ctrl+Shift+C)")
         self.copy_btn.clicked.connect(self.copy_current_text)
-        footer.addWidget(self.copy_btn)
+        actions_row.addWidget(self.copy_btn)
 
-        body_layout.addLayout(footer)
+        body_layout.addLayout(actions_row)
+        card_layout.addWidget(body, stretch=1)
 
-        # Subtle counts row
+        # --- 3. Quiet Utility Footer Strip (Offline Script Switcher + Counts) ---
+        utility = QFrame()
+        utility.setObjectName("UtilityStrip")
+        u_layout = QHBoxLayout(utility)
+        u_layout.setContentsMargins(14, 7, 14, 7)
+        u_layout.setSpacing(8)
+
+        script_lbl = QLabel("Offline script:")
+        script_lbl.setObjectName("MutedLabel")
+        u_layout.addWidget(script_lbl)
+
+        self.script_combo = QComboBox()
+        self.script_combo.setObjectName("CompactCombo")
+        self.script_combo.setToolTip("Re-scan this snip with another offline script model")
+        for key, profile in SCRIPT_PROFILES.items():
+            self.script_combo.addItem(profile.label, userData=key)
+        self.script_combo.currentIndexChanged.connect(self._on_script_changed)
+        u_layout.addWidget(self.script_combo)
+
+        u_layout.addStretch()
+
         self.count_label = QLabel("0 chars")
         self.count_label.setObjectName("MutedLabel")
-        body_layout.addWidget(self.count_label)
+        u_layout.addWidget(self.count_label)
 
-        card_layout.addWidget(body, stretch=1)
+        card_layout.addWidget(utility)
 
     def show_loading(self, anchor: QPoint | None = None, message: str = "Extracting text...") -> None:
         """Display the floating popup in a sleek loading state while OCR runs."""
@@ -338,10 +351,8 @@ class ResultPopup(QWidget):
         self.unwrap_btn.setChecked(False)
         self.unwrap_btn.blockSignals(False)
 
-        # Set extracted text
         self.text_edit.setPlainText(result.text)
 
-        # Detected language pill + detailed tooltip
         if result.languages:
             self.lang_pill.setText(f"🌐 {result.language_summary}")
             tooltip_lines = [
@@ -351,14 +362,13 @@ class ResultPopup(QWidget):
                 for lang in result.languages
             ]
             self.lang_pill.setToolTip("Detected languages:\n" + "\n".join(tooltip_lines))
-        elif result.text.strip():
+        elif has_text:
             self.lang_pill.setText("🌐 Symbols / Numeric")
             self.lang_pill.setToolTip("No natural language letters detected")
         else:
             self.lang_pill.setText("🌐 No text detected")
             self.lang_pill.setToolTip("")
 
-        # Engine & confidence/timing pills
         self.engine_pill.setText(result.engine_name)
         stats_parts: list[str] = []
         if result.confidence > 0:
@@ -371,7 +381,6 @@ class ResultPopup(QWidget):
         else:
             self.stats_pill.hide()
 
-        # Sync script selector without re-triggering signal
         if result.script_used in SCRIPT_PROFILES:
             idx = self.script_combo.findData(result.script_used)
             if idx >= 0:
@@ -379,23 +388,21 @@ class ResultPopup(QWidget):
                 self.script_combo.setCurrentIndex(idx)
                 self._updating_combo = False
 
-        # Copied badge
-        if auto_copied and result.text.strip():
+        if auto_copied and has_text:
             self.copied_badge.setText("✓ Auto-copied")
             self.copied_badge.show()
         else:
             self.copied_badge.hide()
 
-        # Error or fallback note
         if result.error:
             self.note_label.setText(f"⚠ {result.error}")
             self.note_label.show()
         elif result.fallback_note:
             self.note_label.setText(f"ℹ {result.fallback_note}")
             self.note_label.show()
-        elif not result.text.strip():
+        elif not has_text:
             self.note_label.setText(
-                "No text found. Try selecting a different script below or click ✨ AI Enhance."
+                "No text found. Try another offline script below or click ✨ AI."
             )
             self.note_label.show()
         else:
@@ -409,7 +416,7 @@ class ResultPopup(QWidget):
         self.raise_()
         self.activateWindow()
 
-        if auto_close_seconds > 0 and result.ok and result.text.strip():
+        if auto_close_seconds > 0 and result.ok and has_text:
             self._auto_close_timer.start(auto_close_seconds * 1000)
 
     def set_target_language(self, lang_code: str) -> None:
@@ -494,7 +501,7 @@ class ResultPopup(QWidget):
         chars = len(text)
         words = len(text.split()) if text.strip() else 0
         lines = text.count("\n") + 1 if text else 0
-        self.count_label.setText(f"{chars} chars  •  {words} words  •  {lines} lines")
+        self.count_label.setText(f"{chars} chars • {words} words • {lines} lines")
         if not self.text_edit.isReadOnly():
             self.translate_btn.setEnabled(bool(text.strip()))
 
@@ -547,7 +554,6 @@ class ResultPopup(QWidget):
         y = max(avail.top() + 12, min(avail.bottom() - self.height() - 12, y))
         self.move(x, y)
 
-    # --- Frameless dragging via header bar ---
     def mousePressEvent(self, event: QMouseEvent | None) -> None:
         if event and event.button() == Qt.MouseButton.LeftButton:
             self._auto_close_timer.stop()

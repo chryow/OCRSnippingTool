@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -42,6 +42,7 @@ class HistoryDialog(QDialog):
         self.setStyleSheet(DARK_STYLESHEET)
 
         self._build_ui()
+        QShortcut(QKeySequence("Ctrl+F"), self, activated=self.search_edit.setFocus)
         self.refresh()
 
     def _build_ui(self) -> None:
@@ -54,7 +55,7 @@ class HistoryDialog(QDialog):
         top_bar.setSpacing(8)
 
         self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("Search extracted text, translations, or languages...")
+        self.search_edit.setPlaceholderText("Search extracted text, translations, or languages... (Ctrl+F)")
         self.search_edit.textChanged.connect(self.refresh)
         top_bar.addWidget(self.search_edit, stretch=1)
 
@@ -73,16 +74,8 @@ class HistoryDialog(QDialog):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         root.addWidget(splitter, stretch=1)
 
-        # Left: entries list
+        # Left: entries list (styled via unified theme.py)
         self.list_widget = QListWidget()
-        self.list_widget.setStyleSheet(
-            "QListWidget { background-color: #0e1018; border: 1px solid #252b3d; "
-            "border-radius: 10px; padding: 4px; }"
-            "QListWidget::item { padding: 8px 10px; border-radius: 6px; margin-bottom: 2px; }"
-            "QListWidget::item:selected { background-color: rgba(99, 102, 241, 0.28); "
-            "color: #ffffff; }"
-            "QListWidget::item:hover { background-color: #1c2233; }"
-        )
         self.list_widget.currentRowChanged.connect(self._on_selection_changed)
         splitter.addWidget(self.list_widget)
 
@@ -106,7 +99,9 @@ class HistoryDialog(QDialog):
 
         self.detail_text = QPlainTextEdit()
         self.detail_text.setReadOnly(True)
-        self.detail_text.setPlaceholderText("Select a past snip to inspect or copy...")
+        self.detail_text.setPlaceholderText(
+            "No snips yet — press Ctrl+Shift+X or click the tray icon to extract text."
+        )
         detail_layout.addWidget(self.detail_text, stretch=2)
 
         self.trans_label = QLabel("Translation:")

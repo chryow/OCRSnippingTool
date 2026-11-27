@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Sequence
 
 from PIL import Image
 
@@ -59,10 +58,3 @@ class OCREngine(ABC):
     @abstractmethod
     def recognize(self, image: Image.Image, **kwargs) -> OCRResult:
         """Extract text and metadata from a PIL Image."""
-
-
-def join_lines(lines: Sequence[OCRLine], preserve_breaks: bool = True) -> str:
-    """Join OCR lines into clean output text."""
-    cleaned = [line.text.strip() for line in lines if line.text and line.text.strip()]
-    separator = "\n" if preserve_breaks else " "
-    return separator.join(cleaned)

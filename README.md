@@ -98,8 +98,10 @@ python -m ocr_snip --snip
 | --- | --- |
 | Start a new OCR snip | `Ctrl + Shift + X` *(customizable)* or **left-click** tray icon |
 | Cancel snipping overlay | `Esc` or **Right-click** |
+| Copy / Translate / New Snip in popup | `Ctrl + Shift + C` / `Ctrl + T` / `Ctrl + N` |
+| Search Snip History | `Ctrl + F` inside Snip History (`🕒`) |
 | Extract from clipboard image / file | **Right-click** tray icon → menu |
-| Re-scan with another script or AI | Script dropdown or **`✨ AI Enhance`** inside the floating popup |
+| Re-scan with another script or AI | Offline script strip or **`✨ AI`** inside the floating popup |
 | Close floating popup | `Esc` or `✕` |
 
 ---
@@ -162,6 +164,7 @@ OCRSnippingTool/
 ├── ocr_snip/
 │   ├── __main__.py              # Desktop + CLI entry point (--image, --translate, --unwrap, --ai-format)
 │   ├── config.py                # Persistent JSON config & persistent ONNX models dir
+│   ├── ai_client.py             # Shared Gemini / OpenAI / Ollama HTTP client
 │   ├── language.py              # Unicode script + statistical multilingual detector
 │   ├── translate.py             # Built-in 1-click translator (AI + zero-config free web)
 │   ├── history.py               # Persistent searchable snip history store with favorites
