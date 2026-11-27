@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QPoint, QSize, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QPoint, QRect, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QGuiApplication, QKeyEvent, QKeySequence, QMouseEvent, QShortcut
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -24,11 +24,11 @@ from ocr_snip.ocr.local_rapidocr import SCRIPT_PROFILES
 from ocr_snip.ocr.vision_ai import AI_OUTPUT_FORMATS
 from ocr_snip.translate import TARGET_LANGUAGES, TranslationResult
 from ocr_snip.ui.icons import svg_icon
-from ocr_snip.ui.theme import SleekComboBox, apply_sleek_theme
+from ocr_snip.ui.theme import SleekComboBox, SleekSizeGrip, apply_sleek_theme
 
 
 class ResultPopup(QWidget):
-    """Frameless floating card showing extracted text, detected language, and quick actions."""
+    """Frameless, freely resizable floating card showing extracted text and quick actions."""
 
     new_snip_requested = pyqtSignal()
     history_requested = pyqtSignal()
@@ -37,10 +37,16 @@ class ResultPopup(QWidget):
     enhance_ai_requested = pyqtSignal(str)      # ai_output_format: "text" | "markdown" | "latex"
     translate_requested = pyqtSignal(str, str)  # (text, target_lang_code)
     target_language_changed = pyqtSignal(str)   # target_lang_code
+    size_changed = pyqtSignal(int, int)         # (width, height) when user finishes resizing
+
+    _RESIZE_MARGIN = 10
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._drag_offset: QPoint | None = None
+        self._resize_edges: Qt.Edge = Qt.Edge(0)
+        self._resize_start_pos: QPoint | None = None
+        self._resize_start_geom: QRect | None = None
         self._pinned = True
         self._updating_combo = False
         self._updating_target_combo = False
@@ -62,6 +68,12 @@ class ResultPopup(QWidget):
         self._trans_copied_reset_timer.setSingleShot(True)
         self._trans_copied_reset_timer.timeout.connect(self._reset_trans_copy_button)
 
+        self._resize_save_timer = QTimer(self)
+        self._resize_save_timer.setSingleShot(True)
+        self._resize_save_timer.timeout.connect(
+            lambda: self.size_changed.emit(self.width(), self.height())
+        )
+
         self._setup_window()
         self._build_ui()
         apply_sleek_theme(self)
@@ -74,9 +86,21 @@ class ResultPopup(QWidget):
             | Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setMinimumWidth(636)
-        self.setMaximumWidth(780)
-        self.resize(644, 415)
+        self.setMouseTracking(True)
+        self.setMinimumSize(660, 410)
+        self.resize(720, 490)
+
+    def apply_saved_size(self, width: int, height: int) -> None:
+        """Apply persisted user window dimensions safely clamped to screen bounds."""
+        screen = QGuiApplication.primaryScreen()
+        max_w, max_h = 1600, 1000
+        if screen is not None:
+            avail = screen.availableGeometry()
+            max_w = max(720, avail.width() - 48)
+            max_h = max(490, avail.height() - 48)
+        w = max(self.minimumWidth(), min(max_w, int(width)))
+        h = max(self.minimumHeight(), min(max_h, int(height)))
+        self.resize(w, h)
 
     def _bind_shortcuts(self) -> None:
         QShortcut(QKeySequence("Ctrl+Shift+C"), self, activated=self.copy_current_text)
@@ -222,9 +246,9 @@ class ResultPopup(QWidget):
         self.text_edit = QPlainTextEdit()
         self.text_edit.setPlaceholderText("Extracted text will appear here...")
         self.text_edit.textChanged.connect(self._update_counts)
-        body_layout.addWidget(self.text_edit, stretch=1)
+        body_layout.addWidget(self.text_edit, stretch=3)
 
-        # Collapsible Translation Drawer (hidden until needed)
+        # Collapsible Translation Drawer (scales smoothly when window is resized)
         self.translate_panel = QFrame()
         self.translate_panel.setObjectName("TranslatePanel")
         tp_layout = QVBoxLayout(self.translate_panel)
@@ -249,19 +273,19 @@ class ResultPopup(QWidget):
         self.hide_trans_btn.setObjectName("IconButton")
         self.hide_trans_btn.setIcon(svg_icon("close", 13, "#a1a1aa"))
         self.hide_trans_btn.setIconSize(QSize(13, 13))
-        self.hide_trans_btn.setFixedSize(24, 24)
+        self.hide_trans_btn.setFixedSize(26, 26)
         self.hide_trans_btn.setToolTip("Hide translation")
         self.hide_trans_btn.clicked.connect(self.translate_panel.hide)
         tp_header.addWidget(self.hide_trans_btn)
         tp_layout.addLayout(tp_header)
 
         self.translated_edit = QPlainTextEdit()
-        self.translated_edit.setMaximumHeight(115)
+        self.translated_edit.setMinimumHeight(100)
         self.translated_edit.setPlaceholderText("Translated text...")
-        tp_layout.addWidget(self.translated_edit)
+        tp_layout.addWidget(self.translated_edit, stretch=1)
 
         self.translate_panel.hide()
-        body_layout.addWidget(self.translate_panel)
+        body_layout.addWidget(self.translate_panel, stretch=2)
 
         # Clean Primary Action Bar: Translate | Enhance | Copy
         actions_row = QHBoxLayout()
@@ -273,7 +297,7 @@ class ResultPopup(QWidget):
             QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
         self.target_lang_combo.setMinimumContentsLength(10)
-        self.target_lang_combo.setMinimumWidth(136)
+        self.target_lang_combo.setMinimumWidth(144)
         for code, name in TARGET_LANGUAGES:
             self.target_lang_combo.addItem(name, userData=code)
         self.target_lang_combo.currentIndexChanged.connect(self._on_target_lang_changed)
@@ -294,7 +318,7 @@ class ResultPopup(QWidget):
             QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
         self.ai_format_combo.setMinimumContentsLength(10)
-        self.ai_format_combo.setMinimumWidth(132)
+        self.ai_format_combo.setMinimumWidth(138)
         for code, label in AI_OUTPUT_FORMATS:
             self.ai_format_combo.addItem(label, userData=code)
         actions_row.addWidget(self.ai_format_combo)
@@ -320,11 +344,11 @@ class ResultPopup(QWidget):
         body_layout.addLayout(actions_row)
         card_layout.addWidget(body, stretch=1)
 
-        # --- 3. Quiet Utility Footer Strip ---
+        # --- 3. Quiet Utility Footer Strip + Resize Grip ---
         utility = QFrame()
         utility.setObjectName("UtilityStrip")
         u_layout = QHBoxLayout(utility)
-        u_layout.setContentsMargins(14, 7, 14, 7)
+        u_layout.setContentsMargins(14, 7, 8, 7)
         u_layout.setSpacing(8)
 
         script_lbl = QLabel("Script")
@@ -344,6 +368,10 @@ class ResultPopup(QWidget):
         self.count_label = QLabel("0 chars")
         self.count_label.setObjectName("MutedLabel")
         u_layout.addWidget(self.count_label)
+
+        self.size_grip = SleekSizeGrip(self)
+        self.size_grip.setToolTip("Drag corner or any window edge to resize")
+        u_layout.addWidget(self.size_grip, alignment=Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignRight)
 
         card_layout.addWidget(utility)
 
@@ -652,23 +680,96 @@ class ResultPopup(QWidget):
         y = max(avail.top() + 12, min(avail.bottom() - self.height() - 12, y))
         self.move(x, y)
 
+    def _hit_test_edges(self, pos: QPoint) -> Qt.Edge:
+        """Detect if `pos` lies on the outer resize border of the floating card."""
+        card_rect = self.card.geometry()
+        m = self._RESIZE_MARGIN
+        edges = Qt.Edge(0)
+        if abs(pos.x() - card_rect.left()) <= m:
+            edges |= Qt.Edge.LeftEdge
+        elif abs(pos.x() - card_rect.right()) <= m:
+            edges |= Qt.Edge.RightEdge
+        if abs(pos.y() - card_rect.top()) <= m:
+            edges |= Qt.Edge.TopEdge
+        elif abs(pos.y() - card_rect.bottom()) <= m:
+            edges |= Qt.Edge.BottomEdge
+        return edges
+
+    def _update_resize_cursor(self, edges: Qt.Edge) -> None:
+        left_or_right = bool(edges & (Qt.Edge.LeftEdge | Qt.Edge.RightEdge))
+        top_or_bottom = bool(edges & (Qt.Edge.TopEdge | Qt.Edge.BottomEdge))
+        if (edges & Qt.Edge.LeftEdge and edges & Qt.Edge.TopEdge) or (
+            edges & Qt.Edge.RightEdge and edges & Qt.Edge.BottomEdge
+        ):
+            self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        elif (edges & Qt.Edge.RightEdge and edges & Qt.Edge.TopEdge) or (
+            edges & Qt.Edge.LeftEdge and edges & Qt.Edge.BottomEdge
+        ):
+            self.setCursor(Qt.CursorShape.SizeBDiagCursor)
+        elif left_or_right:
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+        elif top_or_bottom:
+            self.setCursor(Qt.CursorShape.SizeVerCursor)
+        else:
+            self.unsetCursor()
+
     def mousePressEvent(self, event: QMouseEvent | None) -> None:
         if event and event.button() == Qt.MouseButton.LeftButton:
             self._auto_close_timer.stop()
-            if event.position().y() <= 58:
+            pos = event.position().toPoint()
+            edges = self._hit_test_edges(pos)
+            if edges != Qt.Edge(0):
+                self._resize_edges = edges
+                self._resize_start_pos = event.globalPosition().toPoint()
+                self._resize_start_geom = self.geometry()
+                return
+            if pos.y() <= self.card.geometry().top() + 54:
                 self._drag_offset = (
                     event.globalPosition().toPoint() - self.frameGeometry().topLeft()
                 )
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
-        if event and self._drag_offset is not None:
-            self.move(event.globalPosition().toPoint() - self._drag_offset)
+        if event is not None:
+            if (
+                self._resize_edges != Qt.Edge(0)
+                and self._resize_start_pos is not None
+                and self._resize_start_geom is not None
+            ):
+                delta = event.globalPosition().toPoint() - self._resize_start_pos
+                geom = QRect(self._resize_start_geom)
+                min_w, min_h = self.minimumWidth(), self.minimumHeight()
+                if self._resize_edges & Qt.Edge.RightEdge:
+                    geom.setRight(max(geom.left() + min_w - 1, geom.right() + delta.x()))
+                if self._resize_edges & Qt.Edge.BottomEdge:
+                    geom.setBottom(max(geom.top() + min_h - 1, geom.bottom() + delta.y()))
+                if self._resize_edges & Qt.Edge.LeftEdge:
+                    new_left = min(geom.right() - min_w + 1, geom.left() + delta.x())
+                    geom.setLeft(new_left)
+                if self._resize_edges & Qt.Edge.TopEdge:
+                    new_top = min(geom.bottom() - min_h + 1, geom.top() + delta.y())
+                    geom.setTop(new_top)
+                self.setGeometry(geom)
+                return
+            if self._drag_offset is not None:
+                self.move(event.globalPosition().toPoint() - self._drag_offset)
+                return
+            self._update_resize_cursor(self._hit_test_edges(event.position().toPoint()))
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
+        if self._resize_edges != Qt.Edge(0):
+            self._resize_edges = Qt.Edge(0)
+            self._resize_start_pos = None
+            self._resize_start_geom = None
+            self.size_changed.emit(self.width(), self.height())
         self._drag_offset = None
         super().mouseReleaseEvent(event)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if self.isVisible():
+            self._resize_save_timer.start(400)
 
     def keyPressEvent(self, event: QKeyEvent | None) -> None:
         if event and event.key() == Qt.Key.Key_Escape:

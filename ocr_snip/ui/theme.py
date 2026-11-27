@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QProxyStyle,
+    QSizeGrip,
     QSpinBox,
     QStyle,
     QStyleOption,
@@ -18,7 +19,7 @@ DARK_STYLESHEET = """
 QWidget {
     color: #e4e4e7;
     font-family: "Segoe UI Variable", "Segoe UI", "SF Pro Text", "Inter", "Helvetica Neue", Arial, sans-serif;
-    font-size: 13px;
+    font-size: 14px;
 }
 
 QToolTip {
@@ -26,30 +27,30 @@ QToolTip {
     color: #f4f4f5;
     border: 1px solid #35353d;
     border-radius: 6px;
-    padding: 5px 9px;
-    font-size: 12px;
+    padding: 6px 10px;
+    font-size: 12.5px;
 }
 
 /* --- System Tray & Context Menus --- */
 QMenu {
     background-color: #18181b;
     color: #e4e4e7;
-    border: 1px solid #2e2e34;
+    border: 1px solid #303038;
     border-radius: 9px;
-    padding: 5px;
-    font-size: 13px;
+    padding: 6px;
+    font-size: 13.5px;
 }
 
 QMenu::item {
     background-color: transparent;
     color: #e4e4e7;
-    padding: 7px 24px 7px 10px;
+    padding: 8px 26px 8px 12px;
     border-radius: 6px;
     margin: 1px 2px;
 }
 
 QMenu::item:selected {
-    background-color: #27272c;
+    background-color: #27272d;
     color: #ffffff;
 }
 
@@ -70,7 +71,7 @@ QMenu::icon {
 /* --- Main Containers --- */
 QDialog, QFrame#PopupCard {
     background-color: #18181b;
-    border: 1px solid #2b2b31;
+    border: 1px solid #2d2d34;
     border-radius: 12px;
 }
 
@@ -96,7 +97,7 @@ QFrame#TranslatePanel {
 
 QFrame#PackCard {
     background-color: #141417;
-    border: 1px solid #26262c;
+    border: 1px solid #26262d;
     border-radius: 8px;
 }
 
@@ -104,52 +105,56 @@ QFrame#PackCard:hover {
     border-color: #3a3a43;
 }
 
+QWidget#ScrollBody {
+    background-color: transparent;
+}
+
 /* --- Typography & Subtle Badges --- */
 QLabel#TitleLabel {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     color: #f4f4f5;
     letter-spacing: -0.1px;
 }
 
 QLabel#PackTitle {
-    font-size: 13px;
+    font-size: 13.5px;
     font-weight: 600;
     color: #f4f4f5;
 }
 
 QLabel#PackDesc {
-    font-size: 11.5px;
-    color: #8e8e98;
+    font-size: 12.5px;
+    color: #9898a3;
 }
 
 QLabel#PackStatusInstalled {
-    font-size: 11.5px;
+    font-size: 12.5px;
     font-weight: 600;
     color: #4ade80;
 }
 
 QLabel#PackStatusAvailable {
-    font-size: 11.5px;
-    color: #71717a;
+    font-size: 12.5px;
+    color: #7c7c88;
 }
 
 QLabel#LangPill {
     background-color: #232328;
-    border: 1px solid #303037;
+    border: 1px solid #32323a;
     color: #f4f4f5;
     border-radius: 6px;
-    padding: 2px 8px;
-    font-size: 11.5px;
+    padding: 3px 9px;
+    font-size: 12.5px;
     font-weight: 500;
 }
 
 QLabel#EnginePill {
     background-color: transparent;
     border: none;
-    color: #8e8e98;
+    color: #9898a3;
     padding: 2px 4px;
-    font-size: 11.5px;
+    font-size: 12.5px;
 }
 
 QLabel#CopiedPill {
@@ -157,8 +162,8 @@ QLabel#CopiedPill {
     border: 1px solid rgba(74, 222, 128, 0.28);
     color: #4ade80;
     border-radius: 6px;
-    padding: 2px 8px;
-    font-size: 11px;
+    padding: 2px 9px;
+    font-size: 12px;
     font-weight: 600;
 }
 
@@ -167,23 +172,23 @@ QLabel#WarnPill {
     border: 1px solid rgba(245, 158, 11, 0.30);
     color: #fbbf24;
     border-radius: 8px;
-    padding: 6px 10px;
-    font-size: 12px;
+    padding: 7px 11px;
+    font-size: 13px;
 }
 
 QLabel#MutedLabel {
-    color: #8e8e98;
-    font-size: 11.5px;
+    color: #9898a3;
+    font-size: 12.5px;
 }
 
 /* --- Text Inputs & Lists --- */
 QPlainTextEdit {
     background-color: #111113;
-    border: 1px solid #27272c;
+    border: 1px solid #28282f;
     border-radius: 8px;
-    padding: 10px 11px;
+    padding: 11px 12px;
     color: #f4f4f5;
-    font-size: 13.5px;
+    font-size: 15px;
     selection-background-color: #3f3f46;
     selection-color: #ffffff;
 }
@@ -194,14 +199,15 @@ QPlainTextEdit:focus {
 
 QListWidget {
     background-color: #111113;
-    border: 1px solid #27272c;
+    border: 1px solid #28282f;
     border-radius: 8px;
-    padding: 4px;
+    padding: 5px;
     outline: none;
+    font-size: 13.5px;
 }
 
 QListWidget::item {
-    padding: 8px 10px;
+    padding: 9px 11px;
     border-radius: 6px;
     margin-bottom: 2px;
     color: #d4d4d8;
@@ -226,14 +232,15 @@ QPushButton {
     background-color: #222227;
     border: 1px solid #32323a;
     border-radius: 7px;
-    padding: 6px 12px;
+    padding: 7px 13px;
     color: #e4e4e7;
     font-weight: 500;
+    font-size: 13.5px;
 }
 
 QPushButton:hover {
     background-color: #2c2c33;
-    border-color: #44444e;
+    border-color: #464652;
     color: #ffffff;
 }
 
@@ -252,7 +259,7 @@ QPushButton#PrimaryButton {
     border: 1px solid #f4f4f5;
     color: #09090b;
     font-weight: 600;
-    padding: 6px 15px;
+    padding: 7px 16px;
 }
 
 QPushButton#PrimaryButton:hover {
@@ -289,9 +296,9 @@ QPushButton#IconButton {
     background-color: transparent;
     border: 1px solid transparent;
     border-radius: 6px;
-    padding: 4px 7px;
+    padding: 5px 8px;
     color: #a1a1aa;
-    font-size: 12px;
+    font-size: 13px;
 }
 
 QPushButton#IconButton:hover {
@@ -310,17 +317,19 @@ QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {
     background-color: #111113;
     border: 1px solid #2b2b32;
     border-radius: 7px;
-    padding: 5px 10px;
+    padding: 6px 11px;
     color: #f4f4f5;
+    font-size: 13.5px;
 }
 
 QComboBox {
-    padding-right: 24px;
+    padding-right: 26px;
+    margin-right: 2px;
 }
 
 QComboBox#CompactCombo {
-    padding: 3px 22px 3px 8px;
-    font-size: 11.5px;
+    padding: 4px 24px 4px 9px;
+    font-size: 12.5px;
     border-radius: 6px;
     background-color: #1b1b20;
     border-color: #292930;
@@ -352,7 +361,7 @@ QComboBox::down-arrow {
 QSpinBox::up-button, QDoubleSpinBox::up-button,
 QSpinBox::down-button, QDoubleSpinBox::down-button {
     subcontrol-origin: border;
-    width: 20px;
+    width: 22px;
     border: none;
     background: transparent;
 }
@@ -379,14 +388,21 @@ QComboBox QAbstractItemView {
     color: #e4e4e7;
     padding: 4px;
     outline: none;
+    font-size: 13.5px;
+}
+
+QComboBox QAbstractItemView::item {
+    min-height: 28px;
+    padding: 4px 10px;
+    border-radius: 5px;
 }
 
 QGroupBox {
     background-color: #141417;
     border: 1px solid #25252b;
     border-radius: 9px;
-    margin-top: 14px;
-    padding: 14px 12px 12px 12px;
+    margin-top: 16px;
+    padding: 16px 14px 14px 14px;
     font-weight: 600;
     color: #d4d4d8;
 }
@@ -394,9 +410,11 @@ QGroupBox {
 QGroupBox::title {
     subcontrol-origin: margin;
     left: 12px;
+    top: 2px;
     padding: 0 6px;
+    background-color: #18181b;
     color: #a1a1aa;
-    font-size: 12px;
+    font-size: 12.5px;
     font-weight: 600;
 }
 
@@ -411,8 +429,9 @@ QProgressBar::chunk {
 }
 
 QCheckBox {
-    spacing: 8px;
+    spacing: 9px;
     color: #e4e4e7;
+    font-size: 13.5px;
 }
 
 /* --- Minimal Underline Tabs --- */
@@ -420,17 +439,18 @@ QTabWidget::pane {
     border: none;
     border-top: 1px solid #26262c;
     background-color: transparent;
-    padding-top: 10px;
+    padding-top: 12px;
 }
 
 QTabBar::tab {
     background-color: transparent;
     border: none;
     border-bottom: 2px solid transparent;
-    padding: 8px 14px;
+    padding: 9px 16px;
     margin-right: 4px;
     color: #8e8e98;
     font-weight: 500;
+    font-size: 13.5px;
 }
 
 QTabBar::tab:hover {
@@ -448,16 +468,20 @@ QScrollArea {
     border: none;
 }
 
+QScrollArea > QWidget > QWidget {
+    background-color: transparent;
+}
+
 QScrollBar:vertical {
     background: transparent;
-    width: 7px;
+    width: 8px;
     margin: 2px 0;
 }
 
 QScrollBar::handle:vertical {
     background: #32323a;
-    border-radius: 3px;
-    min-height: 24px;
+    border-radius: 4px;
+    min-height: 28px;
 }
 
 QScrollBar::handle:vertical:hover {
@@ -468,6 +492,34 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
     background: transparent;
     height: 0;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 8px;
+    margin: 0 2px;
+}
+
+QScrollBar::handle:horizontal {
+    background: #32323a;
+    border-radius: 4px;
+    min-width: 28px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: #4b4b56;
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal,
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+    background: transparent;
+    width: 0;
+}
+
+QSizeGrip {
+    background: transparent;
+    width: 14px;
+    height: 14px;
 }
 """
 
@@ -610,6 +662,23 @@ class SleekDoubleSpinBox(QDoubleSpinBox):
     def paintEvent(self, event) -> None:
         super().paintEvent(event)
         _paint_spin_chevrons(self)
+
+
+class SleekSizeGrip(QSizeGrip):
+    """Minimalist bottom-right resize grip with two subtle diagonal lines."""
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        try:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            pen = QPen(QColor("#52525b"), 1.3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            w, h = float(self.width()), float(self.height())
+            painter.drawLine(QPointF(w - 3.5, h - 9.5), QPointF(w - 9.5, h - 3.5))
+            painter.drawLine(QPointF(w - 3.5, h - 5.5), QPointF(w - 5.5, h - 3.5))
+        finally:
+            if painter.isActive():
+                painter.end()
 
 
 def apply_sleek_theme(root: QWidget) -> None:

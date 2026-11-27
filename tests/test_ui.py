@@ -389,6 +389,24 @@ def test_all_dialogs_paint_cleanly_without_errors(qtbot) -> None:
         assert not dialog.grab().isNull()
 
 
+def test_result_popup_resizable_and_persists_size(qtbot) -> None:
+    popup = ResultPopup()
+    qtbot.addWidget(popup)
+    popup.show()
+
+    # Freely resizable above old 780px cap
+    popup.resize(920, 620)
+    assert popup.width() == 920
+    assert popup.height() == 620
+
+    # apply_saved_size respects minimum dimensions
+    popup.apply_saved_size(200, 150)
+    assert popup.width() >= popup.minimumWidth()
+    assert popup.height() >= popup.minimumHeight()
+    assert not popup.grab().isNull()
+
+
+
 
 
 

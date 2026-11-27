@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from PyQt6.QtCore import QSize, QThread, QUrl, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, QThread, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -78,7 +78,8 @@ class SettingsDialog(QDialog):
 
         self.setWindowTitle("Settings")
         self.setWindowIcon(create_app_icon(64))
-        self.setMinimumWidth(580)
+        self.setMinimumSize(680, 520)
+        self.resize(740, 580)
         self._build_ui()
         apply_sleek_theme(self)
         self._load_from_config()
@@ -266,36 +267,44 @@ class SettingsDialog(QDialog):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.viewport().setStyleSheet("background-color: transparent;")
         scroll_body = QWidget()
+        scroll_body.setObjectName("ScrollBody")
         scroll_layout = QVBoxLayout(scroll_body)
-        scroll_layout.setContentsMargins(0, 0, 6, 0)
-        scroll_layout.setSpacing(6)
+        scroll_layout.setContentsMargins(0, 0, 8, 0)
+        scroll_layout.setSpacing(8)
 
         for key, profile in SCRIPT_PROFILES.items():
             row_frame = QFrame()
             row_frame.setObjectName("PackCard")
             row_layout = QHBoxLayout(row_frame)
-            row_layout.setContentsMargins(12, 8, 12, 8)
-            row_layout.setSpacing(8)
+            row_layout.setContentsMargins(14, 10, 14, 10)
+            row_layout.setSpacing(10)
 
             info_col = QVBoxLayout()
-            info_col.setSpacing(2)
+            info_col.setSpacing(3)
             name_lbl = QLabel(profile.label)
             name_lbl.setObjectName("PackTitle")
             desc_lbl = QLabel(profile.description)
             desc_lbl.setObjectName("PackDesc")
+            desc_lbl.setWordWrap(True)
             info_col.addWidget(name_lbl)
             info_col.addWidget(desc_lbl)
             row_layout.addLayout(info_col, stretch=1)
 
             status_lbl = QLabel("")
+            status_lbl.setMinimumWidth(68)
+            status_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             row_layout.addWidget(status_lbl)
 
             dl_btn = QPushButton("Download")
+            dl_btn.setMinimumWidth(92)
             dl_btn.clicked.connect(lambda _checked=False, k=key: self._download_pack(k))
             row_layout.addWidget(dl_btn)
 
             rm_btn = QPushButton("Remove")
+            rm_btn.setMinimumWidth(78)
             rm_btn.clicked.connect(lambda _checked=False, k=key: self._remove_pack(k))
             if key == "auto":
                 rm_btn.setVisible(False)
