@@ -81,6 +81,11 @@ class AppConfig:
     popup_auto_close_seconds: int = 0  # 0 = stay open until dismissed
     preserve_line_breaks: bool = True
 
+    # Built-in 1-click translation preferences
+    translate_target_lang: str = "en"
+    translation_provider: str = "auto"  # "auto" | "google_free" | "ai"
+    auto_translate: bool = False
+
     # Extra provider-specific or future options
     extra: dict[str, Any] = field(default_factory=dict)
 

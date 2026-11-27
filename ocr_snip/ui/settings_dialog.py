@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -24,7 +25,9 @@ from PyQt6.QtWidgets import (
 
 from ocr_snip.capture.hotkey import format_hotkey_display
 from ocr_snip.config import AppConfig
+from ocr_snip.logging_utils import get_logs_dir
 from ocr_snip.ocr.local_rapidocr import SCRIPT_PROFILES
+from ocr_snip.translate import TARGET_LANGUAGES
 from ocr_snip.ui.theme import DARK_STYLESHEET, create_app_icon
 
 
@@ -123,6 +126,17 @@ class SettingsDialog(QDialog):
         wf_layout.addLayout(timer_form)
 
         layout.addWidget(wf_group)
+
+        diag_row = QHBoxLayout()
+        logs_btn = QPushButton("📄 Open Logs Folder")
+        logs_btn.setToolTip("Open diagnostic log directory")
+        logs_btn.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(get_logs_dir())))
+        )
+        diag_row.addWidget(logs_btn)
+        diag_row.addStretch()
+        layout.addLayout(diag_row)
+
         layout.addStretch()
         self.tabs.addTab(tab, "General")
 
@@ -165,8 +179,29 @@ class SettingsDialog(QDialog):
         form.addRow(tip)
 
         layout.addWidget(mode_group)
+
+        trans_group = QGroupBox("Built-In 1-Click Translation")
+        t_form = QFormLayout(trans_group)
+
+        self.translate_lang_combo = QComboBox()
+        for code, name in TARGET_LANGUAGES:
+            self.translate_lang_combo.addItem(name, code)
+        t_form.addRow("Default target language:", self.translate_lang_combo)
+
+        self.translate_provider_combo = QComboBox()
+        self.translate_provider_combo.addItem("Auto (AI if configured, else Free Web)", "auto")
+        self.translate_provider_combo.addItem("Free Web Translate (no API key)", "google_free")
+        self.translate_provider_combo.addItem("Configured AI Provider only", "ai")
+        t_form.addRow("Translation backend:", self.translate_provider_combo)
+
+        self.auto_translate_cb = QCheckBox(
+            "Automatically translate when detected language differs from target"
+        )
+        t_form.addRow(self.auto_translate_cb)
+
+        layout.addWidget(trans_group)
         layout.addStretch()
-        self.tabs.addTab(tab, "OCR Engine")
+        self.tabs.addTab(tab, "OCR & Translate")
 
     def _build_vision_ai_tab(self) -> None:
         tab = QWidget()
@@ -248,6 +283,10 @@ class SettingsDialog(QDialog):
         self._select_combo_data(self.script_combo, c.local_script)
         self.threshold_spin.setValue(c.hybrid_confidence_threshold)
 
+        self._select_combo_data(self.translate_lang_combo, c.translate_target_lang)
+        self._select_combo_data(self.translate_provider_combo, c.translation_provider)
+        self.auto_translate_cb.setChecked(c.auto_translate)
+
         self._select_combo_data(self.provider_combo, c.ai_provider)
         self.gemini_key_edit.setText(c.gemini_api_key)
         self.gemini_model_edit.setText(c.gemini_model)
@@ -289,6 +328,9 @@ class SettingsDialog(QDialog):
             engine_mode=str(self.mode_combo.currentData() or "hybrid"),
             local_script=str(self.script_combo.currentData() or "auto"),
             hybrid_confidence_threshold=round(self.threshold_spin.value(), 2),
+            translate_target_lang=str(self.translate_lang_combo.currentData() or "en"),
+            translation_provider=str(self.translate_provider_combo.currentData() or "auto"),
+            auto_translate=self.auto_translate_cb.isChecked(),
             ai_provider=str(self.provider_combo.currentData() or "gemini"),
             gemini_api_key=self.gemini_key_edit.text().strip(),
             gemini_model=self.gemini_model_edit.text().strip() or "gemini-2.5-flash",

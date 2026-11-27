@@ -1,26 +1,33 @@
-"""Main PyQt6 desktop application controller, system tray, and async OCR worker."""
+"""Main PyQt6 desktop application controller, system tray, and async OCR/translation workers."""
 
 from __future__ import annotations
 
 import io
+import logging
 import sys
 from pathlib import Path
 
 from PIL import Image
-from PyQt6.QtCore import QBuffer, QIODevice, QObject, QPoint, QThread, QTimer, pyqtSignal
-from PyQt6.QtGui import QAction, QGuiApplication, QImage
+from PyQt6.QtCore import QBuffer, QIODevice, QObject, QPoint, QThread, QTimer, QUrl, pyqtSignal
+from PyQt6.QtGui import QAction, QDesktopServices, QGuiApplication, QImage
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QMessageBox, QSystemTrayIcon
 
 from ocr_snip import __app_name__, __version__
 from ocr_snip.capture.hotkey import GlobalHotkeyBridge, format_hotkey_display
 from ocr_snip.capture.screenshot import capture_virtual_desktop
 from ocr_snip.config import AppConfig
+from ocr_snip.language import language_name
+from ocr_snip.logging_utils import get_logs_dir, install_crash_handler, setup_logging
 from ocr_snip.ocr.base import OCRResult
 from ocr_snip.ocr.manager import OCRManager
+from ocr_snip.single_instance import SingleInstanceGuard
+from ocr_snip.translate import TranslationResult, Translator
 from ocr_snip.ui.overlay import SnipOverlay
 from ocr_snip.ui.result_popup import ResultPopup
 from ocr_snip.ui.settings_dialog import SettingsDialog
 from ocr_snip.ui.theme import DARK_STYLESHEET, create_app_icon
+
+logger = logging.getLogger("ocr_snip.app")
 
 
 def qimage_to_pil(qimg: QImage) -> Image.Image:
@@ -61,10 +68,37 @@ class OCRWorker(QThread):
         self.finished_result.emit(result)
 
 
-class OCRSnippingApp(QObject):
-    """Top-level controller coordinating tray icon, hotkey, overlay, popup, and OCR."""
+class TranslateWorker(QThread):
+    """Runs 1-click translation off the UI thread."""
 
-    def __init__(self, qt_app: QApplication, config: AppConfig | None = None) -> None:
+    finished_translation = pyqtSignal(object)  # TranslationResult
+
+    def __init__(
+        self,
+        translator: Translator,
+        text: str,
+        target_lang: str,
+        parent: QObject | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._translator = translator
+        self._text = text
+        self._target_lang = target_lang
+
+    def run(self) -> None:
+        res = self._translator.translate(self._text, target_lang=self._target_lang)
+        self.finished_translation.emit(res)
+
+
+class OCRSnippingApp(QObject):
+    """Top-level controller coordinating tray icon, hotkey, overlay, popup, OCR, and translation."""
+
+    def __init__(
+        self,
+        qt_app: QApplication,
+        config: AppConfig | None = None,
+        instance_guard: SingleInstanceGuard | None = None,
+    ) -> None:
         super().__init__()
         self.qt_app = qt_app
         self.qt_app.setQuitOnLastWindowClosed(False)
@@ -77,26 +111,36 @@ class OCRSnippingApp(QObject):
 
         self.config = config or AppConfig.load()
         self.manager = OCRManager(self.config)
+        self.translator = Translator(self.config)
+        self._instance_guard = instance_guard
 
         self._overlay: SnipOverlay | None = None
         self._snip_pending: bool = False
         self._settings_open: bool = False
         self._worker: OCRWorker | None = None
+        self._translate_worker: TranslateWorker | None = None
         self._last_image: Image.Image | None = None
         self._last_anchor: QPoint | None = None
 
         self.popup = ResultPopup()
+        self.popup.set_target_language(self.config.translate_target_lang)
         self.popup.new_snip_requested.connect(self.start_snip)
         self.popup.settings_requested.connect(self.open_settings)
         self.popup.rescan_script_requested.connect(self.rescan_with_script)
         self.popup.enhance_ai_requested.connect(self.enhance_with_ai)
+        self.popup.translate_requested.connect(self.translate_text)
+        self.popup.target_language_changed.connect(self._on_popup_target_lang_changed)
 
         self.hotkey = GlobalHotkeyBridge(self)
         self.hotkey.triggered.connect(self.start_snip)
 
+        if self._instance_guard is not None:
+            self._instance_guard.activate_requested.connect(self._on_external_activation)
+
         self.tray = QSystemTrayIcon(self.icon, self)
         self._setup_tray()
         self._apply_hotkey()
+        logger.info("%s v%s initialized (mode=%s)", __app_name__, __version__, self.config.engine_mode)
 
     def _setup_tray(self) -> None:
         self._tray_menu = QMenu()
@@ -119,6 +163,10 @@ class OCRSnippingApp(QObject):
         settings_action.triggered.connect(self.open_settings)
         self._tray_menu.addAction(settings_action)
 
+        logs_action = QAction("📄 Open Logs Folder", self)
+        logs_action.triggered.connect(self.open_logs_folder)
+        self._tray_menu.addAction(logs_action)
+
         quit_action = QAction("Quit", self)
         quit_action.triggered.connect(self.quit)
         self._tray_menu.addAction(quit_action)
@@ -134,6 +182,10 @@ class OCRSnippingApp(QObject):
         ):
             self.start_snip()
 
+    def _on_external_activation(self, command: str) -> None:
+        logger.info("Activated by secondary launch command: %s", command)
+        self.start_snip()
+
     def _apply_hotkey(self) -> None:
         ok = self.hotkey.start(self.config.hotkey)
         pretty = format_hotkey_display(self.config.hotkey)
@@ -141,6 +193,7 @@ class OCRSnippingApp(QObject):
         if ok:
             self.tray.setToolTip(f"{__app_name__} — Press {pretty} or click to snip")
         else:
+            logger.warning("Global hotkey %s unavailable: %s", self.config.hotkey, self.hotkey.last_error)
             self.tray.setToolTip(
                 f"{__app_name__} — Click tray icon to snip (hotkey unavailable)"
             )
@@ -154,6 +207,9 @@ class OCRSnippingApp(QObject):
                 self.icon,
                 3000,
             )
+
+    def open_logs_folder(self) -> None:
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(get_logs_dir())))
 
     def start_snip(self) -> None:
         """Freeze the desktop and show the fullscreen snipping selection overlay."""
@@ -169,6 +225,7 @@ class OCRSnippingApp(QObject):
         try:
             capture = capture_virtual_desktop()
         except Exception as exc:
+            logger.exception("Screen capture failed")
             QMessageBox.critical(None, __app_name__, f"Failed to capture screen:\n{exc}")
             return
 
@@ -223,6 +280,7 @@ class OCRSnippingApp(QObject):
         try:
             img = Image.open(path).convert("RGB")
         except Exception as exc:
+            logger.warning("Could not open image %s: %s", path, exc)
             QMessageBox.warning(None, __app_name__, f"Could not open image:\n{exc}")
             return
         self._last_image = img
@@ -253,6 +311,35 @@ class OCRSnippingApp(QObject):
             force_engine="vision_ai",
             loading_msg=f"Enhancing with {self.config.ai_provider.title()} AI...",
         )
+
+    def _on_popup_target_lang_changed(self, target_code: str) -> None:
+        self.config.translate_target_lang = target_code
+        self.translator.update_config(self.config)
+        try:
+            self.config.save()
+        except Exception as exc:
+            logger.warning("Could not persist target language preference: %s", exc)
+
+    def translate_text(self, text: str, target_lang: str | None = None) -> None:
+        if not text.strip():
+            return
+        if self._translate_worker is not None and self._translate_worker.isRunning():
+            return
+
+        code = target_lang or self.config.translate_target_lang or "en"
+        self.popup.show_translation_loading(language_name(code))
+
+        worker = TranslateWorker(self.translator, text, code, parent=self)
+        worker.finished_translation.connect(self._on_translation_finished)
+        worker.finished.connect(worker.deleteLater)
+        self._translate_worker = worker
+        worker.start()
+
+    def _on_translation_finished(self, result: TranslationResult) -> None:
+        self._translate_worker = None
+        if not result.ok:
+            logger.warning("Translation failed: %s", result.error)
+        self.popup.show_translation_result(result)
 
     def _run_ocr(
         self,
@@ -285,6 +372,9 @@ class OCRSnippingApp(QObject):
         self._worker = None
         auto_copied = False
 
+        if not result.ok:
+            logger.warning("OCR failed (%s): %s", result.engine_name, result.error)
+
         if self.config.auto_copy and result.text.strip():
             clipboard = QGuiApplication.clipboard()
             if clipboard is not None:
@@ -298,6 +388,15 @@ class OCRSnippingApp(QObject):
                 auto_close_seconds=self.config.popup_auto_close_seconds,
                 anchor=self._last_anchor,
             )
+            if self.config.auto_translate and result.ok and result.text.strip():
+                primary_code = (
+                    result.primary_language.code.split("-")[0].lower()
+                    if result.primary_language and result.primary_language.code
+                    else ""
+                )
+                target_base = self.config.translate_target_lang.split("-")[0].lower()
+                if not primary_code or primary_code != target_base:
+                    self.translate_text(result.text, self.config.translate_target_lang)
         elif self.tray.supportsMessages():
             preview = result.text.strip().replace("\n", " ")[:110] or "No text detected"
             lang = result.language_summary
@@ -316,20 +415,33 @@ class OCRSnippingApp(QObject):
                 self.config = dialog.updated_config()
                 self.config.save()
                 self.manager.update_config(self.config)
+                self.translator.update_config(self.config)
+                self.popup.set_target_language(self.config.translate_target_lang)
                 self._apply_hotkey()
         finally:
             self._settings_open = False
 
     def quit(self) -> None:
+        logger.info("Shutting down %s", __app_name__)
         self.hotkey.stop()
+        if self._instance_guard is not None:
+            self._instance_guard.stop()
         self.tray.hide()
         self.qt_app.quit()
 
 
 def run_gui(start_with_snip: bool = False) -> int:
-    """Launch the PyQt6 desktop application."""
+    """Launch the PyQt6 desktop application with logging and single-instance guard."""
+    setup_logging()
+    install_crash_handler(gui=True)
+
     qt_app = QApplication(sys.argv)
-    controller = OCRSnippingApp(qt_app)
+    guard = SingleInstanceGuard()
+    if guard.try_notify_existing("SNIP"):
+        return 0
+    guard.start_listening()
+
+    controller = OCRSnippingApp(qt_app, instance_guard=guard)
     if start_with_snip:
         QTimer.singleShot(150, controller.start_snip)
     else:
