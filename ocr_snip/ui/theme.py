@@ -244,11 +244,11 @@ QLabel#LangPill {{
     border: 1px solid {t.hairline};
     color: {t.ink};
     border-radius: 2px;
-    padding: 4px 9px;
+    padding: 2px 7px;
     font-family: {t.font_mono};
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
-    letter-spacing: 0.6px;
+    letter-spacing: 0.5px;
 }}
 
 QLabel#EnginePill {{

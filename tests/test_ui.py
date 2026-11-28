@@ -435,6 +435,105 @@ def test_editorial_eink_tokens_and_responsive_layout(qtbot) -> None:
     assert not popup.grab().isNull()
 
 
+def test_manual_source_language_selection_swap_and_translation(qtbot, tmp_path) -> None:
+    from PyQt6.QtWidgets import QApplication
+
+    from ocr_snip.history import HistoryStore
+    from ocr_snip.translate import TranslationResult
+    from ocr_snip.ui.app import OCRSnippingApp
+
+    popup = ResultPopup()
+    qtbot.addWidget(popup)
+    popup.show()
+
+    # Default is Auto-Detect; OCR updates item 0 text to Auto (French)
+    assert popup.current_source_language() == "auto"
+    popup.show_result(
+        OCRResult(
+            text="Bonjour",
+            engine_name="Local ML",
+            confidence=0.96,
+            languages=[DetectedLanguage("fr", "French")],
+        )
+    )
+    assert popup.source_lang_combo.itemText(0) == "Auto (French)"
+    assert "French" in popup.lang_pill.text()
+
+    # Pick explicit input language (Japanese) -> disables auto-detect & emits signal
+    with qtbot.waitSignal(popup.source_language_changed, timeout=1000) as src_blocker:
+        idx_ja = popup.source_lang_combo.findData("ja")
+        assert idx_ja >= 0
+        popup.source_lang_combo.setCurrentIndex(idx_ja)
+    assert src_blocker.args == ["ja"]
+    assert popup.current_source_language() == "ja"
+    assert popup.lang_pill.text() == "Japanese"
+    assert "auto-detect disabled" in popup.lang_pill.toolTip().lower()
+
+    # Subsequent OCR results do NOT override the user's manual source language
+    popup.show_result(
+        OCRResult(
+            text="Some ambiguous text",
+            engine_name="Local ML",
+            confidence=0.90,
+            languages=[DetectedLanguage("en", "English")],
+        )
+    )
+    assert popup.current_source_language() == "ja"
+    assert popup.lang_pill.text() == "Japanese"
+
+    # Symmetric swap: Japanese -> English becomes English -> Japanese
+    popup.set_target_language("en")
+    popup.swap_btn.click()
+    assert popup.current_source_language() == "en"
+    assert popup.target_lang_combo.currentData() == "ja"
+
+    # SettingsDialog loads and persists translate_source_lang
+    dlg = SettingsDialog(AppConfig(translate_source_lang="ko", translate_target_lang="en"))
+    qtbot.addWidget(dlg)
+    assert dlg.translate_source_lang_combo.currentData() == "ko"
+    idx_id = dlg.translate_source_lang_combo.findData("id")
+    dlg.translate_source_lang_combo.setCurrentIndex(idx_id)
+    assert dlg.build_config().translate_source_lang == "id"
+
+    # End-to-end controller forwards manual source_lang to translator
+    qt_app = QApplication.instance()
+    assert isinstance(qt_app, QApplication)
+    controller = OCRSnippingApp(
+        qt_app,
+        config=AppConfig(engine_mode="local", translate_source_lang="ms", translate_target_lang="en"),
+        history_store=HistoryStore(path=tmp_path / "history.json"),
+    )
+    seen_kwargs: dict[str, str | None] = {}
+
+    def fake_translate(text: str, target_lang: str | None = None, **kwargs):
+        seen_kwargs["target_lang"] = target_lang
+        seen_kwargs["source_lang"] = kwargs.get("source_lang")
+        return TranslationResult(
+            translated_text="Good morning",
+            source_language="Malay",
+            target_language="English",
+            provider_name="Stub Translator",
+        )
+
+    controller.translator.translate = fake_translate  # type: ignore[method-assign]
+    try:
+        assert controller.popup.current_source_language() == "ms"
+        controller.popup.text_edit.setPlainText("Selamat pagi")
+        controller.popup.translate_btn.click()
+        qtbot.waitUntil(
+            lambda: controller.popup.translated_edit.toPlainText() == "Good morning",
+            timeout=3000,
+        )
+        assert seen_kwargs == {"target_lang": "en", "source_lang": "ms"}
+        assert "Malay → English" in controller.popup.translate_meta_label.text()
+    finally:
+        controller.hotkey.stop()
+        controller.tray.setContextMenu(None)
+        controller.tray.hide()
+        controller.popup.hide()
+
+
+
 
 
 

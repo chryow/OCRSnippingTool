@@ -32,7 +32,7 @@ from ocr_snip.ocr.local_rapidocr import (
     is_script_installed,
 )
 from ocr_snip.ocr.vision_ai import AI_OUTPUT_FORMATS
-from ocr_snip.translate import TARGET_LANGUAGES
+from ocr_snip.translate import SOURCE_LANGUAGES, TARGET_LANGUAGES
 from ocr_snip.ui.icons import svg_icon
 from ocr_snip.ui.theme import (
     THEME,
@@ -241,6 +241,15 @@ class SettingsDialog(QDialog):
 
         trans_group = QGroupBox("Translation")
         t_form = QFormLayout(trans_group)
+
+        self.translate_source_lang_combo = SleekComboBox()
+        self.translate_source_lang_combo.setToolTip(
+            "Choose Auto-Detect or lock a specific input language for extracted text."
+        )
+        for code, name in SOURCE_LANGUAGES:
+            label = "Auto-Detect (Default)" if code == "auto" else name
+            self.translate_source_lang_combo.addItem(label, code)
+        t_form.addRow("Default input language:", self.translate_source_lang_combo)
 
         self.translate_lang_combo = SleekComboBox()
         for code, name in TARGET_LANGUAGES:
@@ -504,6 +513,7 @@ class SettingsDialog(QDialog):
         self.threshold_spin.setValue(c.hybrid_confidence_threshold)
         self._select_combo_data(self.ai_format_combo, c.ai_output_format)
 
+        self._select_combo_data(self.translate_source_lang_combo, c.translate_source_lang)
         self._select_combo_data(self.translate_lang_combo, c.translate_target_lang)
         self._select_combo_data(self.translate_provider_combo, c.translation_provider)
         self.auto_translate_cb.setChecked(c.auto_translate)
@@ -555,6 +565,7 @@ class SettingsDialog(QDialog):
             auto_probe_installed_scripts=self.auto_probe_cb.isChecked(),
             hybrid_confidence_threshold=round(self.threshold_spin.value(), 2),
             ai_output_format=str(self.ai_format_combo.currentData() or "text"),
+            translate_source_lang=str(self.translate_source_lang_combo.currentData() or "auto"),
             translate_target_lang=str(self.translate_lang_combo.currentData() or "en"),
             translation_provider=str(self.translate_provider_combo.currentData() or "auto"),
             auto_translate=self.auto_translate_cb.isChecked(),

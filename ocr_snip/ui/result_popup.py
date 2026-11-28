@@ -22,7 +22,7 @@ from ocr_snip.formatting import unwrap_paragraphs
 from ocr_snip.ocr.base import OCRResult
 from ocr_snip.ocr.local_rapidocr import SCRIPT_PROFILES
 from ocr_snip.ocr.vision_ai import AI_OUTPUT_FORMATS
-from ocr_snip.translate import TARGET_LANGUAGES, TranslationResult
+from ocr_snip.translate import SOURCE_LANGUAGES, TARGET_LANGUAGES, TranslationResult
 from ocr_snip.ui.icons import svg_icon
 from ocr_snip.ui.theme import (
     THEME,
@@ -43,6 +43,7 @@ class ResultPopup(QWidget):
     rescan_script_requested = pyqtSignal(str)
     enhance_ai_requested = pyqtSignal(str)      # ai_output_format: "text" | "markdown" | "latex"
     translate_requested = pyqtSignal(str, str)  # (text, target_lang_code)
+    source_language_changed = pyqtSignal(str)   # source_lang_code ("auto" or ISO/BCP-47)
     target_language_changed = pyqtSignal(str)   # target_lang_code
     size_changed = pyqtSignal(int, int)         # (width, height) when user finishes resizing
 
@@ -57,9 +58,13 @@ class ResultPopup(QWidget):
         self._resize_start_geom: QRect | None = None
         self._pinned = True
         self._updating_combo = False
+        self._updating_source_combo = False
         self._updating_target_combo = False
         self._raw_ocr_text: str = ""
         self._detected_lang_code: str = ""
+        self._detected_lang_summary: str = ""
+        self._detected_lang_tooltip: str = ""
+        self._has_extracted_text: bool = False
         self._hotkey_display: str = "CTRL+SHIFT+X"
         self._prev_lang_text: str = ""
         self._prev_lang_tooltip: str = ""
@@ -219,16 +224,26 @@ class ResultPopup(QWidget):
         lb_layout.setContentsMargins(14, 9, 14, 9)
         lb_layout.setSpacing(8)
 
-        self.lang_pill = QLabel("Detecting...")
-        self.lang_pill.setObjectName("LangPill")
-        lb_layout.addWidget(self.lang_pill)
+        self.source_lang_combo = SleekComboBox()
+        self.source_lang_combo.setToolTip(
+            "Input text language — keep on Auto-Detect or pick a specific language manually"
+        )
+        self.source_lang_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.source_lang_combo.setMinimumContentsLength(10)
+        self.source_lang_combo.setMinimumWidth(132)
+        for code, name in SOURCE_LANGUAGES:
+            self.source_lang_combo.addItem(name, userData=code)
+        self.source_lang_combo.currentIndexChanged.connect(self._on_source_lang_changed)
+        lb_layout.addWidget(self.source_lang_combo, stretch=1)
 
         self.swap_btn = QPushButton()
         self.swap_btn.setObjectName("SwapButton")
         self.swap_btn.setIcon(svg_icon("swap", 14, THEME.ink))
         self.swap_btn.setIconSize(QSize(14, 14))
         self.swap_btn.setFixedSize(30, 30)
-        self.swap_btn.setToolTip("Swap source and target languages")
+        self.swap_btn.setToolTip("Swap input and target languages")
         self.swap_btn.clicked.connect(self._on_swap_languages)
         lb_layout.addWidget(self.swap_btn)
 
@@ -238,7 +253,7 @@ class ResultPopup(QWidget):
             QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
         self.target_lang_combo.setMinimumContentsLength(10)
-        self.target_lang_combo.setMinimumWidth(140)
+        self.target_lang_combo.setMinimumWidth(128)
         for code, name in TARGET_LANGUAGES:
             self.target_lang_combo.addItem(name, userData=code)
         self.target_lang_combo.currentIndexChanged.connect(self._on_target_lang_changed)
@@ -257,7 +272,7 @@ class ResultPopup(QWidget):
             QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
         self.ai_format_combo.setMinimumContentsLength(9)
-        self.ai_format_combo.setMinimumWidth(132)
+        self.ai_format_combo.setMinimumWidth(118)
         for code, label in AI_OUTPUT_FORMATS:
             self.ai_format_combo.addItem(label, userData=code)
         lb_layout.addWidget(self.ai_format_combo)
@@ -299,12 +314,16 @@ class ResultPopup(QWidget):
         sp_header.setObjectName("PaneHeader")
         sp_header.setMinimumHeight(34)
         sph_layout = QHBoxLayout(sp_header)
-        sph_layout.setContentsMargins(12, 5, 8, 5)
-        sph_layout.setSpacing(8)
+        sph_layout.setContentsMargins(10, 5, 8, 5)
+        sph_layout.setSpacing(6)
 
         src_title = QLabel("EXTRACTED")
         src_title.setObjectName("MonoLabel")
         sph_layout.addWidget(src_title)
+
+        self.lang_pill = QLabel("Detecting...")
+        self.lang_pill.setObjectName("LangPill")
+        sph_layout.addWidget(self.lang_pill)
 
         self.engine_pill = QLabel("Local OCR")
         self.engine_pill.setObjectName("EnginePill")
@@ -315,7 +334,7 @@ class ResultPopup(QWidget):
         self.stats_pill.hide()
         sph_layout.addWidget(self.stats_pill)
 
-        sph_layout.addStretch()
+        sph_layout.addStretch(1)
 
         self.unwrap_btn = QPushButton("UNWRAP")
         self.unwrap_btn.setObjectName("IconButton")
@@ -441,13 +460,12 @@ class ResultPopup(QWidget):
     def _sync_pane_orientation(self) -> None:
         if not hasattr(self, "panes_splitter"):
             return
-        desired = (
-            Qt.Orientation.Horizontal
-            if self.width() >= self._SIDE_BY_SIDE_WIDTH
-            else Qt.Orientation.Vertical
-        )
+        side_by_side = self.width() >= self._SIDE_BY_SIDE_WIDTH
+        desired = Qt.Orientation.Horizontal if side_by_side else Qt.Orientation.Vertical
         if self.panes_splitter.orientation() != desired:
             self.panes_splitter.setOrientation(desired)
+        if hasattr(self, "engine_pill"):
+            self.engine_pill.setVisible((not side_by_side) or self.width() >= 1140)
 
     def show_loading(
         self,
@@ -462,6 +480,10 @@ class ResultPopup(QWidget):
             self.text_edit.setPlainText("")
             self._raw_ocr_text = ""
             self._detected_lang_code = ""
+            self._detected_lang_summary = ""
+            self._detected_lang_tooltip = ""
+            self._has_extracted_text = False
+            self._update_auto_detect_item_text()
             self._prev_lang_text = ""
             self._prev_lang_tooltip = ""
             self._prev_engine_text = ""
@@ -485,6 +507,7 @@ class ResultPopup(QWidget):
         self.stats_pill.hide()
         self.text_edit.setReadOnly(True)
         self.script_combo.setEnabled(False)
+        self.source_lang_combo.setEnabled(False)
         self.ai_format_combo.setEnabled(False)
         self.ai_btn.setEnabled(False)
         self.copy_btn.setEnabled(False)
@@ -511,6 +534,7 @@ class ResultPopup(QWidget):
         self.progress.hide()
         self.text_edit.setReadOnly(False)
         self.script_combo.setEnabled(True)
+        self.source_lang_combo.setEnabled(True)
         self.ai_format_combo.setEnabled(True)
         self.ai_btn.setEnabled(True)
         self.copy_btn.setEnabled(True)
@@ -539,6 +563,7 @@ class ResultPopup(QWidget):
             self.translate_btn.setEnabled(has_text)
             self.unwrap_btn.setEnabled(has_text)
             self._raw_ocr_text = result.text
+            self._has_extracted_text = has_text
             self.unwrap_btn.blockSignals(True)
             self.unwrap_btn.setChecked(False)
             self.unwrap_btn.blockSignals(False)
@@ -547,22 +572,25 @@ class ResultPopup(QWidget):
 
             if result.languages:
                 self._detected_lang_code = result.languages[0].code
-                self.lang_pill.setText(f"AUTO · {result.language_summary}")
+                self._detected_lang_summary = result.language_summary
                 tooltip_lines = [
                     f"{lang.label}"
                     + (f" [{lang.script}]" if lang.script else "")
                     + f" — {lang.confidence:.0%}"
                     for lang in result.languages
                 ]
-                self.lang_pill.setToolTip("Detected languages:\n" + "\n".join(tooltip_lines))
+                self._detected_lang_tooltip = "Detected languages:\n" + "\n".join(tooltip_lines)
             elif has_text:
                 self._detected_lang_code = ""
-                self.lang_pill.setText("AUTO · Symbols")
-                self.lang_pill.setToolTip("No natural language letters detected")
+                self._detected_lang_summary = ""
+                self._detected_lang_tooltip = "No natural language letters detected"
             else:
                 self._detected_lang_code = ""
-                self.lang_pill.setText("No text detected")
-                self.lang_pill.setToolTip("")
+                self._detected_lang_summary = ""
+                self._detected_lang_tooltip = ""
+
+            self._update_auto_detect_item_text()
+            self._sync_source_lang_pill()
 
             self.engine_pill.setText(result.engine_name)
             stats_parts: list[str] = []
@@ -614,6 +642,49 @@ class ResultPopup(QWidget):
         if auto_close_seconds > 0 and result.ok and has_text:
             self._auto_close_timer.start(auto_close_seconds * 1000)
 
+    def current_source_language(self) -> str:
+        """Return the selected input language code ('auto' or ISO/BCP-47 code)."""
+        return str(self.source_lang_combo.currentData() or "auto")
+
+    def set_source_language(self, lang_code: str) -> None:
+        """Select the input language ('auto' for Auto-Detect, or an explicit code)."""
+        idx = self.source_lang_combo.findData(lang_code or "auto")
+        if idx < 0:
+            idx = self.source_lang_combo.findData("auto")
+        if idx >= 0:
+            self._updating_source_combo = True
+            self.source_lang_combo.setCurrentIndex(idx)
+            self._updating_source_combo = False
+            self._sync_source_lang_pill()
+
+    def _update_auto_detect_item_text(self) -> None:
+        idx = self.source_lang_combo.findData("auto")
+        if idx >= 0:
+            label = (
+                f"Auto ({self._detected_lang_summary})"
+                if self._detected_lang_summary
+                else "Auto-Detect"
+            )
+            self.source_lang_combo.setItemText(idx, label)
+
+    def _sync_source_lang_pill(self) -> None:
+        code = self.current_source_language()
+        if code.lower() != "auto":
+            chosen_name = self.source_lang_combo.currentText()
+            self.lang_pill.setText(chosen_name)
+            self.lang_pill.setToolTip(
+                f"Input language manually set to {chosen_name} (auto-detect disabled)"
+            )
+        elif self._detected_lang_summary:
+            self.lang_pill.setText(self._detected_lang_summary)
+            self.lang_pill.setToolTip(self._detected_lang_tooltip)
+        elif self._has_extracted_text:
+            self.lang_pill.setText("Symbols")
+            self.lang_pill.setToolTip(self._detected_lang_tooltip)
+        else:
+            self.lang_pill.setText("No text detected")
+            self.lang_pill.setToolTip("")
+
     def set_target_language(self, lang_code: str) -> None:
         idx = self.target_lang_combo.findData(lang_code)
         if idx >= 0:
@@ -627,24 +698,38 @@ class ResultPopup(QWidget):
             self.ai_format_combo.setCurrentIndex(idx)
 
     def _on_swap_languages(self) -> None:
-        """Swap target language to the detected source language (and swap panes if translated)."""
+        """Swap input and target languages (and swap panes if a translation is visible)."""
         current_target = str(self.target_lang_combo.currentData() or "en")
-        src_code = self._detected_lang_code.strip()
-        if src_code.lower() == "zh-cn":
-            src_code = "zh-CN"
-        elif src_code.lower() == "zh-tw":
-            src_code = "zh-TW"
+        current_source = self.current_source_language()
 
-        new_target = ""
-        if src_code and src_code.lower() != current_target.lower():
-            if self.target_lang_combo.findData(src_code) >= 0:
-                new_target = src_code
-        if not new_target:
-            new_target = "en" if current_target.lower() != "en" else "id"
+        if current_source.lower() != "auto":
+            # Explicit source + target: perform a true symmetric swap
+            new_source = current_target
+            new_target = current_source
+            src_idx = self.source_lang_combo.findData(new_source)
+            tgt_idx = self.target_lang_combo.findData(new_target)
+            if src_idx >= 0:
+                self.source_lang_combo.setCurrentIndex(src_idx)
+            if tgt_idx >= 0:
+                self.target_lang_combo.setCurrentIndex(tgt_idx)
+        else:
+            # Auto-detect mode: swap target to detected source language
+            src_code = self._detected_lang_code.strip()
+            if src_code.lower() == "zh-cn":
+                src_code = "zh-CN"
+            elif src_code.lower() == "zh-tw":
+                src_code = "zh-TW"
 
-        idx = self.target_lang_combo.findData(new_target)
-        if idx >= 0:
-            self.target_lang_combo.setCurrentIndex(idx)
+            new_target = ""
+            if src_code and src_code.lower() != current_target.lower():
+                if self.target_lang_combo.findData(src_code) >= 0:
+                    new_target = src_code
+            if not new_target:
+                new_target = "en" if current_target.lower() != "en" else "id"
+
+            idx = self.target_lang_combo.findData(new_target)
+            if idx >= 0:
+                self.target_lang_combo.setCurrentIndex(idx)
 
         # If a translation is visible, move translated text to source and re-translate back
         if self.translate_panel.isVisible() and self.translated_edit.toPlainText().strip():
@@ -664,11 +749,14 @@ class ResultPopup(QWidget):
         fmt = str(self.ai_format_combo.currentData() or "text")
         self.enhance_ai_requested.emit(fmt)
 
-    def show_translation_loading(self, target_label: str) -> None:
+    def show_translation_loading(self, target_label: str, source_label: str = "") -> None:
         self._auto_close_timer.stop()
         self.translate_btn.setEnabled(False)
         self.translate_btn.setText("TRANSLATING...")
-        self.translate_meta_label.setText(f"Translating to {target_label}...")
+        if source_label:
+            self.translate_meta_label.setText(f"Translating {source_label} → {target_label}...")
+        else:
+            self.translate_meta_label.setText(f"Translating to {target_label}...")
         self.translated_edit.setPlaceholderText("Translating...")
         self.translated_edit.setPlainText("")
         self.translated_edit.setReadOnly(True)
@@ -683,12 +771,17 @@ class ResultPopup(QWidget):
 
         if result.ok:
             self.translate_meta_label.setWordWrap(False)
-            meta_parts = [result.target_language]
+            pair = (
+                f"{result.source_language} → {result.target_language}"
+                if result.source_language
+                else result.target_language
+            )
+            meta_parts = [pair]
             if result.provider_name:
                 meta_parts.append(result.provider_name)
             self.translate_meta_label.setText(" · ".join(meta_parts))
             self.translate_meta_label.setToolTip(
-                f"{result.target_language} · {result.provider_name} · {int(round(result.elapsed_ms))} ms"
+                f"{pair} · {result.provider_name} · {int(round(result.elapsed_ms))} ms"
                 if result.elapsed_ms > 0
                 else " · ".join(meta_parts)
             )
@@ -743,6 +836,16 @@ class ResultPopup(QWidget):
             return
         target_code = str(self.target_lang_combo.currentData() or "en")
         self.translate_requested.emit(text, target_code)
+
+    def _on_source_lang_changed(self, index: int) -> None:
+        if index < 0:
+            return
+        self._sync_source_lang_pill()
+        if self._updating_source_combo:
+            return
+        code = self.source_lang_combo.itemData(index)
+        if code:
+            self.source_language_changed.emit(str(code))
 
     def _on_target_lang_changed(self, index: int) -> None:
         if self._updating_target_combo or index < 0:

@@ -109,6 +109,7 @@ class AppConfig:
     history_max_entries: int = 100
 
     # Built-in 1-click translation preferences
+    translate_source_lang: str = "auto"  # "auto" (auto-detect) or explicit ISO/BCP-47 code
     translate_target_lang: str = "en"
     translation_provider: str = "auto"  # "auto" | "google_free" | "ai"
     auto_translate: bool = False
