@@ -145,3 +145,88 @@ def test_translate_empty_text_returns_error() -> None:
     res = Translator(AppConfig()).translate("   ")
     assert not res.ok
     assert res.error is not None
+
+
+def test_translate_explicit_source_lang_google_free(monkeypatch) -> None:
+    captured_params: dict[str, str] = {}
+
+    def fake_get(self, url, **kwargs):
+        captured_params.update(kwargs["params"])
+        return httpx.Response(
+            200,
+            json=[[["Good morning", "Selamat pagi", None, None, 10]], None, "ms"],
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx.Client, "get", fake_get)
+    cfg = AppConfig(
+        translation_provider="google_free",
+        translate_source_lang="id",
+        translate_target_lang="en",
+    )
+    res = Translator(cfg).translate("Selamat pagi")
+
+    assert res.ok
+    assert captured_params["sl"] == "id"
+    assert captured_params["tl"] == "en"
+    assert res.source_language == "Indonesian"
+    assert res.target_language == "English"
+
+
+def test_translate_explicit_source_lang_mymemory_bypasses_autodetect(monkeypatch) -> None:
+    def fail_detect(_text: str):
+        raise AssertionError("detect_languages should not be called when source_lang is explicit")
+
+    monkeypatch.setattr("ocr_snip.translate.detect_languages", fail_detect)
+
+    def fake_get(self, url, **kwargs):
+        if "translate.googleapis.com" in url or "clients5.google.com" in url:
+            assert kwargs["params"]["sl"] == "ms"
+            return httpx.Response(429, request=httpx.Request("GET", url))
+        assert "api.mymemory.translated.net" in url
+        assert kwargs["params"]["langpair"] == "ms|en"
+        return httpx.Response(
+            200,
+            json={
+                "responseStatus": 200,
+                "responseData": {"translatedText": "Thank you"},
+            },
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx.Client, "get", fake_get)
+    cfg = AppConfig(translation_provider="google_free", translate_target_lang="en")
+    res = Translator(cfg).translate("Terima kasih", source_lang="ms")
+
+    assert res.ok
+    assert res.translated_text == "Thank you"
+    assert res.source_language == "Malay"
+
+
+def test_translate_explicit_source_lang_ai_prompt(monkeypatch) -> None:
+    captured_body: dict = {}
+
+    def fake_post(self, url, **kwargs):
+        captured_body.update(kwargs["json"])
+        return httpx.Response(
+            200,
+            json={"candidates": [{"content": {"parts": [{"text": "Hello"}]}}]},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    cfg = AppConfig(
+        translation_provider="ai",
+        ai_provider="gemini",
+        gemini_api_key="gem-key",
+        translate_source_lang="id",
+        translate_target_lang="en",
+    )
+    res = Translator(cfg).translate("Halo")
+
+    assert res.ok
+    assert res.source_language == "Indonesian"
+    assert res.target_language == "English"
+    prompt_text = captured_body["systemInstruction"]["parts"][0]["text"]
+    assert "from Indonesian into English" in prompt_text
+

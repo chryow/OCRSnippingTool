@@ -90,15 +90,22 @@ class TranslateWorker(QThread):
         translator: Translator,
         text: str,
         target_lang: str,
+        *,
+        source_lang: str = "auto",
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
         self._translator = translator
         self._text = text
         self._target_lang = target_lang
+        self._source_lang = source_lang
 
     def run(self) -> None:
-        res = self._translator.translate(self._text, target_lang=self._target_lang)
+        res = self._translator.translate(
+            self._text,
+            target_lang=self._target_lang,
+            source_lang=self._source_lang,
+        )
         self.finished_translation.emit(res)
 
 
@@ -144,6 +151,7 @@ class OCRSnippingApp(QObject):
 
         self.popup = ResultPopup()
         self.popup.apply_saved_size(self.config.popup_width, self.config.popup_height)
+        self.popup.set_source_language(self.config.translate_source_lang)
         self.popup.set_target_language(self.config.translate_target_lang)
         self.popup.set_ai_output_format(self.config.ai_output_format)
         self.popup.new_snip_requested.connect(self.start_snip)
@@ -152,6 +160,7 @@ class OCRSnippingApp(QObject):
         self.popup.rescan_script_requested.connect(self.rescan_with_script)
         self.popup.enhance_ai_requested.connect(self.enhance_with_ai)
         self.popup.translate_requested.connect(self.translate_text)
+        self.popup.source_language_changed.connect(self._on_popup_source_lang_changed)
         self.popup.target_language_changed.connect(self._on_popup_target_lang_changed)
         self.popup.size_changed.connect(self._on_popup_size_changed)
 
@@ -389,6 +398,14 @@ class OCRSnippingApp(QObject):
             loading_msg=f"Enhancing with {self.config.ai_provider.title()} AI{fmt_label}...",
         )
 
+    def _on_popup_source_lang_changed(self, source_code: str) -> None:
+        self.config.translate_source_lang = source_code or "auto"
+        self.translator.update_config(self.config)
+        try:
+            self.config.save()
+        except Exception as exc:
+            logger.warning("Could not persist source language preference: %s", exc)
+
     def _on_popup_target_lang_changed(self, target_code: str) -> None:
         self.config.translate_target_lang = target_code
         self.translator.update_config(self.config)
@@ -407,16 +424,33 @@ class OCRSnippingApp(QObject):
         except Exception as exc:
             logger.warning("Could not persist popup size: %s", exc)
 
-    def translate_text(self, text: str, target_lang: str | None = None) -> None:
+    def translate_text(
+        self,
+        text: str,
+        target_lang: str | None = None,
+        source_lang: str | None = None,
+    ) -> None:
         if not text.strip():
             return
         if self._translate_worker is not None and self._translate_worker.isRunning():
             return
 
         code = target_lang or self.config.translate_target_lang or "en"
-        self.popup.show_translation_loading(language_name(code))
+        src = (
+            source_lang
+            if source_lang is not None
+            else (self.popup.current_source_language() or self.config.translate_source_lang or "auto")
+        )
+        src_label = "" if src.lower() == "auto" else language_name(src)
+        self.popup.show_translation_loading(language_name(code), source_label=src_label)
 
-        worker = TranslateWorker(self.translator, text, code, parent=self)
+        worker = TranslateWorker(
+            self.translator,
+            text,
+            code,
+            source_lang=src,
+            parent=self,
+        )
         worker.finished_translation.connect(self._on_translation_finished)
         worker.finished.connect(worker.deleteLater)
         self._translate_worker = worker
@@ -497,14 +531,22 @@ class OCRSnippingApp(QObject):
                 anchor=self._last_anchor,
             )
             if self.config.auto_translate and result.ok and result.text.strip():
-                primary_code = (
-                    result.primary_language.code.split("-")[0].lower()
-                    if result.primary_language and result.primary_language.code
-                    else ""
-                )
+                manual_src = (self.config.translate_source_lang or "auto").strip()
+                if manual_src.lower() != "auto":
+                    primary_code = manual_src.split("-")[0].lower()
+                else:
+                    primary_code = (
+                        result.primary_language.code.split("-")[0].lower()
+                        if result.primary_language and result.primary_language.code
+                        else ""
+                    )
                 target_base = self.config.translate_target_lang.split("-")[0].lower()
                 if not primary_code or primary_code != target_base:
-                    self.translate_text(result.text, self.config.translate_target_lang)
+                    self.translate_text(
+                        result.text,
+                        self.config.translate_target_lang,
+                        source_lang=manual_src,
+                    )
         elif self.tray.supportsMessages():
             preview = result.text.strip().replace("\n", " ")[:110] or "No text detected"
             lang = result.language_summary
@@ -529,6 +571,7 @@ class OCRSnippingApp(QObject):
                 self.config.save()
                 self.manager.update_config(self.config)
                 self.translator.update_config(self.config)
+                self.popup.set_source_language(self.config.translate_source_lang)
                 self.popup.set_target_language(self.config.translate_target_lang)
                 self.popup.set_ai_output_format(self.config.ai_output_format)
                 self._apply_hotkey()
